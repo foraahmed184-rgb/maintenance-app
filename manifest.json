@@ -1,1 +1,9 @@
-{"name":"نظام طلبات الصيانة","short_name":"الصيانة","start_url":"./","display":"standalone","background_color":"#f5f7fb","theme_color":"#0f172a"}
+{
+  "name": "نظام طلبات الصيانة",
+  "short_name": "الصيانة",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f3f6fb",
+  "theme_color": "#0f172a",
+  "icons": []
+}

@@ -1,215 +1,209 @@
-const firebaseConfig = {
-  apiKey: "AIzaSyCK7gJ9-zUiygiYHJVwYFb6nUBweptV3XI",
-  authDomain: "maintenance-app-fa8cc.firebaseapp.com",
-  projectId: "maintenance-app-fa8cc",
-  storageBucket: "maintenance-app-fa8cc.firebasestorage.app",
-  messagingSenderId: "888866675500",
-  appId: "1:888866675500:web:d808b825c1801ed566ea89"
-};
+const ADMIN_USER = 'admin';
+const ADMIN_PASS = '1234';
+const WORKER_PASS = '0000';
 
-const $ = id => document.getElementById(id);
-let db;
-let currentUser = JSON.parse(localStorage.getItem('maintenance_user') || 'null');
-let requests = [];
+let currentUser = null;
+const $ = (id) => document.getElementById(id);
 
-try {
-  firebase.initializeApp(firebaseConfig);
-  db = firebase.firestore();
-} catch (e) {
-  alert('خطأ Firebase: ' + e.message);
+const priorityText = { normal: 'عادي', important: 'مهم', urgent: 'مستعجل' };
+const statusText = { new: 'جديد', progress: 'قيد التنفيذ', done: 'تم التنفيذ' };
+const roleTextMap = { admin: 'مسؤول النظام', worker: 'العامل', member: 'عضو من الفريق' };
+
+function getRequests(){
+  try { return JSON.parse(localStorage.getItem('maintenanceRequests') || '[]'); }
+  catch { return []; }
 }
+function saveRequests(items){ localStorage.setItem('maintenanceRequests', JSON.stringify(items)); }
+function getNotifications(){
+  try { return JSON.parse(localStorage.getItem('maintenanceNotifications') || '[]'); }
+  catch { return []; }
+}
+function saveNotifications(items){ localStorage.setItem('maintenanceNotifications', JSON.stringify(items)); }
 
-function initUser() {
-  if (currentUser) {
-    $('loginCard').classList.add('hidden');
-    $('mainContent').classList.remove('hidden');
-    $('hello').textContent = 'مرحباً، ' + currentUser.name + ' (' + (currentUser.role === 'worker' ? 'عامل الصيانة' : 'عضو فريق') + ')';
-    startListening();
+function pushNotification(title, body, type='info'){
+  const item = { id: Date.now().toString()+Math.random().toString(16).slice(2), title, body, type, at: new Date().toLocaleString('ar-SA') };
+  const list = [item, ...getNotifications()].slice(0, 80);
+  saveNotifications(list);
+  renderNotifications();
+  if('Notification' in window && Notification.permission === 'granted'){
+    try { new Notification(title, { body }); } catch(e) {}
   }
 }
+function requestNotificationPermission(){
+  if(!('Notification' in window)){ alert('المتصفح لا يدعم إشعارات سطح المكتب.'); return; }
+  Notification.requestPermission().then(p=>{
+    if(p==='granted') pushNotification('تم تفعيل الإشعارات', 'ستظهر لك تنبيهات داخل التطبيق وعلى الجهاز أثناء فتح الموقع.', 'success');
+    else alert('لم يتم تفعيل الإشعارات. تقدر تستخدم إشعارات التطبيق الداخلية.');
+  });
+}
+function renderNotifications(){
+  const box=$('notificationsList');
+  if(!box) return;
+  const list=getNotifications();
+  if(!list.length){ box.innerHTML='<p class="muted">لا توجد إشعارات حالياً.</p>'; return; }
+  box.innerHTML=list.slice(0,10).map(n=>`
+    <div class="notification ${n.type}">
+      <strong>${escapeHtml(n.title)}</strong>
+      <p>${escapeHtml(n.body)}</p>
+      <span>${escapeHtml(n.at)}</span>
+    </div>`).join('');
+}
+function clearNotifications(){ saveNotifications([]); renderNotifications(); }
 
-$('saveUserBtn').onclick = () => {
-  const name = $('userName').value.trim();
-  const role = $('userRole').value;
-  if (!name) {
-    $('loginMsg').textContent = 'اكتب اسمك أولاً';
-    return;
-  }
-  currentUser = { name, role };
-  localStorage.setItem('maintenance_user', JSON.stringify(currentUser));
-  initUser();
-};
-
-$('logoutBtn').onclick = () => {
-  localStorage.removeItem('maintenance_user');
-  location.reload();
-};
-
-document.querySelectorAll('.tab').forEach(btn => btn.onclick = () => {
-  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
-  btn.classList.add('active');
-  $(btn.dataset.view).classList.remove('hidden');
-});
-
-function imageToDataUrl(file, maxSize = 900, quality = 0.72) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('تعذر قراءة الصورة'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('صيغة الصورة غير مدعومة'));
-      img.onload = () => {
-        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
+function fileToDataUrl(file){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file);
+  });
+}
+async function filesToDataUrls(input){
+  const files=[...(input.files||[])].slice(0,5);
+  const resized=[];
+  for(const file of files){ resized.push(await resizeImage(file)); }
+  return resized;
+}
+function resizeImage(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        const max=900; let {width,height}=img;
+        if(width>height && width>max){height=Math.round(height*max/width);width=max}
+        if(height>=width && height>max){width=Math.round(width*max/height);height=max}
+        const canvas=document.createElement('canvas'); canvas.width=width; canvas.height=height;
+        canvas.getContext('2d').drawImage(img,0,0,width,height);
+        resolve(canvas.toDataURL('image/jpeg',0.72));
       };
-      img.src = reader.result;
+      img.onerror=reject; img.src=reader.result;
     };
-    reader.readAsDataURL(file);
+    reader.onerror=reject; reader.readAsDataURL(file);
   });
 }
 
-async function readImages(files) {
-  const selected = Array.from(files || []).slice(0, 3);
-  const urls = [];
-  for (const file of selected) {
-    urls.push(await imageToDataUrl(file));
+function login(){
+  const name=$('nameInput').value.trim();
+  const role=$('roleInput').value;
+  const pass=$('passwordInput').value;
+  $('loginError').textContent='';
+  if(!name){ $('loginError').textContent='اكتب اسمك أولاً'; return; }
+  if(role==='admin' && !(name.toLowerCase()===ADMIN_USER && pass===ADMIN_PASS)){
+    $('loginError').textContent='بيانات المسؤول غير صحيحة'; return;
   }
-  return urls;
+  if(role==='worker' && pass!==WORKER_PASS){ $('loginError').textContent='كلمة مرور العامل غير صحيحة'; return; }
+  currentUser={name,role};
+  localStorage.setItem('maintenanceCurrentUser', JSON.stringify(currentUser));
+  showApp();
 }
-
-$('requestForm').onsubmit = async e => {
-  e.preventDefault();
-  const b = e.target.querySelector('button');
-  b.disabled = true;
-  b.textContent = 'جاري الإرسال...';
-
-  try {
-    const title = $('title').value.trim();
-    const location = $('location').value.trim();
-    if (!title || !location) throw new Error('اكتب عنوان المشكلة والموقع');
-
-    const imgs = await readImages($('requestImages').files);
-    await db.collection('maintenance_requests').add({
-      title,
-      location,
-      priority: $('priority').value,
-      description: $('description').value.trim(),
-      requester: currentUser.name,
-      status: 'جديد',
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      images: imgs,
-      doneImages: [],
-      comments: [{ by: currentUser.name, text: 'تم إنشاء الطلب', at: new Date().toISOString() }]
-    });
-    e.target.reset();
-    alert('تم إرسال الطلب بنجاح');
-  } catch (err) {
-    alert('صار خطأ: ' + err.message);
-  } finally {
-    b.disabled = false;
-    b.textContent = 'إرسال الطلب';
-  }
-};
-
-function startListening() {
-  db.collection('maintenance_requests').orderBy('createdAt', 'desc').onSnapshot(s => {
-    requests = s.docs.map(d => ({ id: d.id, ...d.data() }));
-    render();
-  }, e => alert('خطأ قراءة البيانات: ' + e.message));
+function logout(){ localStorage.removeItem('maintenanceCurrentUser'); currentUser=null; location.reload(); }
+function showApp(){
+  $('loginCard').classList.add('hidden'); $('appView').classList.remove('hidden'); $('topActions').classList.remove('hidden');
+  $('welcomeText').textContent=`مرحباً، ${currentUser.name}`;
+  $('roleText').textContent=roleTextMap[currentUser.role] || 'مستخدم';
+  $('requestFormCard').style.display=currentUser.role==='worker' ? 'none' : 'block';
+  renderNotifications();
+  renderRequests();
 }
-
-['statusFilter', 'priorityFilter', 'searchBox'].forEach(id => $(id).addEventListener('input', render));
-
-function filtered() {
-  const sf = $('statusFilter').value;
-  const pf = $('priorityFilter').value;
-  const t = $('searchBox').value.trim();
-  return requests.filter(r => (sf === 'all' || r.status === sf) && (pf === 'all' || r.priority === pf) && (!t || `${r.title} ${r.location} ${r.requester}`.includes(t)));
+async function submitRequest(){
+  const title=$('titleInput').value.trim(), location=$('locationInput').value.trim(), description=$('descriptionInput').value.trim(), priority=$('priorityInput').value;
+  $('submitMsg').textContent='';
+  if(!title || !location || !description){ $('submitMsg').textContent='عبّئ العنوان والمكان والوصف'; $('submitMsg').className='error'; return; }
+  $('submitRequestBtn').disabled=true; $('submitRequestBtn').textContent='جاري الإرسال...';
+  try{
+    const beforeImages=await filesToDataUrls($('beforeImagesInput'));
+    const items=getRequests();
+    const req={id:Date.now().toString(),title,location,description,priority,status:'new',requester:currentUser.name,createdAt:new Date().toLocaleString('ar-SA'),beforeImages,afterImages:[],updates:[],reminders:[]};
+    items.unshift(req);
+    saveRequests(items);
+    pushNotification('طلب صيانة جديد', `${currentUser.name} أرسل طلب: ${title} (${priorityText[priority]})`, priority==='urgent'?'urgent':'info');
+    $('titleInput').value=''; $('locationInput').value=''; $('descriptionInput').value=''; $('beforeImagesInput').value=''; $('priorityInput').value='normal';
+    $('submitMsg').className='success'; $('submitMsg').textContent='تم إرسال الطلب بنجاح'; renderRequests();
+  }catch(e){ $('submitMsg').className='error'; $('submitMsg').textContent='تعذر إرسال الطلب. جرّب صورة أصغر.'; }
+  $('submitRequestBtn').disabled=false; $('submitRequestBtn').textContent='إرسال الطلب';
 }
-
-function esc(s = '') {
-  return String(s).replace(/[&<>'"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[m]));
+function setStatus(id,status){
+  if(currentUser.role!=='worker' && currentUser.role!=='admin') return;
+  let changedTitle='';
+  const items=getRequests().map(r=>{
+    if(r.id!==id) return r;
+    changedTitle=r.title;
+    return {...r,status,updates:[...(r.updates||[]),`${currentUser.name}: ${statusText[status]} - ${new Date().toLocaleString('ar-SA')}`]};
+  });
+  saveRequests(items);
+  pushNotification('تحديث حالة طلب', `تم تغيير حالة "${changedTitle}" إلى: ${statusText[status]} بواسطة ${currentUser.name}`, status==='done'?'success':'info');
+  renderRequests();
 }
-
-function timeText(ts) {
-  try { return ts?.toDate ? ts.toDate().toLocaleString('ar-SA') : 'الآن'; } catch { return ''; }
+function sendReminder(id){
+  const items=getRequests().map(r=>{
+    if(r.id!==id) return r;
+    const reminder = `${currentUser.name}: تذكير بسبب التأخير - ${new Date().toLocaleString('ar-SA')}`;
+    pushNotification('تذكير تأخير صيانة', `${currentUser.name} أرسل تذكير للطلب: ${r.title}`, 'warning');
+    return {...r, reminders:[...(r.reminders||[]), reminder], updates:[...(r.updates||[]), reminder]};
+  });
+  saveRequests(items); renderRequests();
 }
-
-function prio(p) { return p === 'عاجل' ? 3 : p === 'مهم' ? 2 : 1; }
-
-function card(r, worker = false) {
-  const d = document.createElement('article');
-  d.className = 'request';
-  d.innerHTML = `<h3>${esc(r.title)}</h3><p>${esc(r.description || '')}</p><div class="meta"><span class="badge ${r.status === 'جديد' ? 'new' : r.status === 'قيد التنفيذ' ? 'progress' : r.status === 'تم التنفيذ' ? 'done' : 'cancel'}">${r.status}</span><span>الطالب: ${esc(r.requester || '')}</span><span>الموقع: ${esc(r.location || '')}</span><span>${r.priority}</span><span>${timeText(r.createdAt)}</span></div>${(r.images || []).length ? `<div class="images">${r.images.map(u => `<img src="${u}">`).join('')}</div>` : ''}${(r.doneImages || []).length ? `<h4>صور الإنجاز</h4><div class="images">${r.doneImages.map(u => `<img src="${u}">`).join('')}</div>` : ''}<div class="actions"><button data-open>فتح التفاصيل</button>${worker ? '<button data-status="قيد التنفيذ">قيد التنفيذ</button><button data-status="تم التنفيذ">تم التنفيذ</button><button data-status="ملغي">إلغاء</button>' : ''}</div>`;
-  d.querySelector('[data-open]').onclick = () => openDetails(r.id);
-  d.querySelectorAll('[data-status]').forEach(b => b.onclick = () => setStatus(r.id, b.dataset.status));
-  return d;
+function deleteRequest(id){
+  if(currentUser.role!=='admin') return;
+  if(!confirm('هل تريد حذف الطلب؟')) return;
+  const req=getRequests().find(r=>r.id===id);
+  saveRequests(getRequests().filter(r=>r.id!==id));
+  pushNotification('حذف طلب صيانة', `المسؤول حذف الطلب: ${req?.title || ''}`, 'danger');
+  renderRequests();
 }
-
-function render() {
-  $('countBadge').textContent = requests.length;
-  const list = $('requestList');
-  list.innerHTML = '';
-  filtered().forEach(r => list.appendChild(card(r, false)));
-  if (!filtered().length) list.innerHTML = '<div class="card">لا توجد طلبات حالياً</div>';
-
-  const wl = $('workerList');
-  wl.innerHTML = '';
-  [...requests].sort((a, b) => (prio(b.priority) - prio(a.priority)) || ((b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))).forEach(r => wl.appendChild(card(r, true)));
+async function addAfterImages(id,input){
+  if(currentUser.role!=='worker' && currentUser.role!=='admin') return;
+  const imgs=await filesToDataUrls(input);
+  let title='';
+  const items=getRequests().map(r=>{ if(r.id!==id) return r; title=r.title; return {...r,afterImages:[...(r.afterImages||[]),...imgs],updates:[...(r.updates||[]),`${currentUser.name}: أضاف صور بعد التنفيذ - ${new Date().toLocaleString('ar-SA')}`]}; });
+  saveRequests(items);
+  pushNotification('إضافة صور للطلب', `تمت إضافة صور للطلب: ${title}`, 'info');
+  renderRequests();
 }
-
-async function setStatus(id, status) {
-  try {
-    await db.collection('maintenance_requests').doc(id).update({
-      status,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      comments: firebase.firestore.FieldValue.arrayUnion({ by: currentUser.name, text: 'تم تغيير الحالة إلى: ' + status, at: new Date().toISOString() })
-    });
-  } catch (err) {
-    alert('تعذر تغيير الحالة: ' + err.message);
-  }
+function openImage(src){ $('modalImage').src=src; $('imageModal').classList.remove('hidden'); }
+function renderImages(images=[]){
+  if(!images.length) return '';
+  return `<div class="images">${images.map(src=>`<img src="${src}" onclick="openImage('${src}')" alt="صورة الطلب">`).join('')}</div>`;
 }
-
-function openDetails(id) {
-  const r = requests.find(x => x.id === id);
-  if (!r) return;
-  $('dialogTitle').textContent = r.title;
-  $('dialogBody').innerHTML = `<p><b>الوصف:</b> ${esc(r.description)}</p><p><b>الموقع:</b> ${esc(r.location)} | <b>الطالب:</b> ${esc(r.requester)} | <b>الحالة:</b> ${esc(r.status)}</p>${(r.images || []).length ? `<h3>صور المشكلة</h3><div class="images">${r.images.map(u => `<img src="${u}">`).join('')}</div>` : ''}${(r.doneImages || []).length ? `<h3>صور الإنجاز</h3><div class="images">${r.doneImages.map(u => `<img src="${u}">`).join('')}</div>` : ''}<h3>التواصل داخل التطبيق</h3>${(r.comments || []).map(c => `<div class="comment"><b>${esc(c.by)}</b><br>${esc(c.text)}<br><small>${new Date(c.at).toLocaleString('ar-SA')}</small></div>`).join('')}<label>إضافة تعليق<input id="newComment" placeholder="اكتب تحديث"></label><button id="addCommentBtn">إضافة التعليق</button><hr><label>صور بعد التنفيذ<input id="doneImagesInput" type="file" accept="image/*" multiple></label><button id="uploadDoneImages">رفع صور الإنجاز</button>`;
-
-  $('addCommentBtn').onclick = async () => {
-    const text = $('newComment').value.trim();
-    if (!text) return;
-    await db.collection('maintenance_requests').doc(id).update({
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      comments: firebase.firestore.FieldValue.arrayUnion({ by: currentUser.name, text, at: new Date().toISOString() })
-    });
-    $('detailsDialog').close();
-  };
-
-  $('uploadDoneImages').onclick = async () => {
-    try {
-      const files = $('doneImagesInput').files;
-      if (!files.length) return alert('اختر صورة');
-      const urls = await readImages(files);
-      await db.collection('maintenance_requests').doc(id).update({
-        doneImages: firebase.firestore.FieldValue.arrayUnion(...urls),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        comments: firebase.firestore.FieldValue.arrayUnion({ by: currentUser.name, text: 'تم رفع صور الإنجاز', at: new Date().toISOString() })
-      });
-      $('detailsDialog').close();
-    } catch (err) {
-      alert('تعذر رفع الصور: ' + err.message);
-    }
-  };
-  $('detailsDialog').showModal();
+function canRemind(r){
+  return currentUser.role==='member' && r.requester===currentUser.name && r.status!=='done';
 }
+function renderRequests(){
+  const filter=$('filterInput').value;
+  let items=getRequests(); if(filter!=='all') items=items.filter(r=>r.status===filter);
+  const box=$('requestsList');
+  if(!items.length){ box.innerHTML='<p class="muted">لا توجد طلبات حالياً.</p>'; return; }
+  box.innerHTML=items.map(r=>`
+    <article class="request priority-${r.priority}">
+      <div class="request-head">
+        <div>
+          <h3>${escapeHtml(r.title)}</h3>
+          <div class="badges"><span class="badge ${r.priority}">${priorityText[r.priority]}</span><span class="badge ${r.status}">${statusText[r.status]}</span>${(r.reminders||[]).length?`<span class="badge remind">تذكير ${r.reminders.length}</span>`:''}</div>
+        </div>
+        ${currentUser.role==='admin'?`<button class="danger" onclick="deleteRequest('${r.id}')">حذف</button>`:''}
+      </div>
+      <div class="meta">الطالب: ${escapeHtml(r.requester)}<br>المكان: ${escapeHtml(r.location)}<br>التاريخ: ${r.createdAt}</div>
+      <p class="desc">${escapeHtml(r.description)}</p>
+      ${r.beforeImages?.length?'<strong>صور المشكلة:</strong>':''}${renderImages(r.beforeImages)}
+      ${r.afterImages?.length?'<strong>صور بعد التنفيذ:</strong>':''}${renderImages(r.afterImages)}
+      ${canRemind(r)?`<button class="remind-btn" onclick="sendReminder('${r.id}')">تذكير: الطلب متأخر</button>`:''}
+      ${(currentUser.role==='worker'||currentUser.role==='admin')?`
+        <div class="actions">
+          <button class="small-btn ${r.status==='new'?'active':''}" onclick="setStatus('${r.id}','new')">جديد</button>
+          <button class="small-btn ${r.status==='progress'?'active':''}" onclick="setStatus('${r.id}','progress')">قيد التنفيذ</button>
+          <button class="small-btn ${r.status==='done'?'active':''}" onclick="setStatus('${r.id}','done')">تم التنفيذ</button>
+        </div>
+        <div class="after-upload"><label>إضافة صور بعد التنفيذ</label><input type="file" accept="image/*" multiple onchange="addAfterImages('${r.id}', this)"></div>`:''}
+      ${(r.updates||[]).length?`<div class="meta updates"><strong>التحديثات والتذكيرات:</strong><br>${r.updates.map(escapeHtml).join('<br>')}</div>`:''}
+    </article>`).join('');
+}
+function escapeHtml(s=''){return String(s).replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));}
 
-$('closeDialog').onclick = () => $('detailsDialog').close();
-initUser();
+$('roleInput').addEventListener('change',()=>{ $('passwordWrap').classList.toggle('hidden', $('roleInput').value==='member'); });
+$('loginBtn').addEventListener('click',login);
+$('logoutBtn').addEventListener('click',logout);
+$('notifyBtn').addEventListener('click',requestNotificationPermission);
+$('clearNotifsBtn').addEventListener('click',clearNotifications);
+$('submitRequestBtn').addEventListener('click',submitRequest);
+$('filterInput').addEventListener('change',renderRequests);
+$('closeModal').addEventListener('click',()=>$('imageModal').classList.add('hidden'));
+$('imageModal').addEventListener('click',(e)=>{if(e.target.id==='imageModal') $('imageModal').classList.add('hidden')});
+try{ currentUser=JSON.parse(localStorage.getItem('maintenanceCurrentUser')||'null'); if(currentUser) showApp(); }catch{}

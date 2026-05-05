@@ -1,25 +1,105 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>نظام طلبات الصيانة</title>
-<link rel="stylesheet" href="styles.css">
-<link rel="manifest" href="manifest.json">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>نظام طلبات الصيانة</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json" />
 </head>
 <body>
-<header><div><h1>نظام طلبات الصيانة</h1><p>طلبات الفريق والعامل في مكان واحد</p></div></header>
-<main>
-<section id="loginCard" class="card"><h2>دخول المستخدم</h2><p>اكتب اسمك واختر دورك.</p><label>اسمك<input id="userName" placeholder="مثلاً: أحمد"></label><label>دورك<select id="userRole"><option value="team">عضو من الفريق</option><option value="worker">عامل الصيانة</option></select></label><button id="saveUserBtn">دخول</button><p id="loginMsg" class="msg"></p></section>
-<section id="mainContent" class="hidden">
-<div class="topbar"><span id="hello"></span><button id="logoutBtn" class="ghost">خروج</button></div>
-<nav><button class="tab active" data-view="newRequest">طلب صيانة</button><button class="tab" data-view="allRequests">كل الطلبات <span id="countBadge">0</span></button><button class="tab" data-view="worker">لوحة العامل</button></nav>
-<section id="newRequest" class="view"><div class="card"><h2>طلب صيانة جديد</h2><form id="requestForm"><label>عنوان المشكلة<input id="title" required placeholder="مثلاً: المكيف لا يعمل"></label><label>الموقع<input id="location" required placeholder="مثلاً: الدور الثاني - مكتب الإدارة"></label><label>الأولوية<select id="priority"><option>عادي</option><option>مهم</option><option>عاجل</option></select></label><label>وصف المشكلة<textarea id="description" rows="3" placeholder="اكتب التفاصيل"></textarea></label><label>صور المشكلة<input id="requestImages" type="file" accept="image/*" multiple></label><button type="submit">إرسال الطلب</button></form></div></section>
-<section id="allRequests" class="view hidden"><div class="card"><h2>كل الطلبات</h2><div class="filters"><select id="statusFilter"><option value="all">كل الحالات</option><option>جديد</option><option>قيد التنفيذ</option><option>تم التنفيذ</option><option>ملغي</option></select><select id="priorityFilter"><option value="all">كل الأولويات</option><option>عاجل</option><option>مهم</option><option>عادي</option></select><input id="searchBox" placeholder="بحث"></div></div><div id="requestList" class="requestList"></div></section>
-<section id="worker" class="view hidden"><div class="card"><h2>لوحة عامل الصيانة</h2><p>العامل يغير الحالة ويرفع صور الإنجاز.</p></div><div id="workerList" class="requestList"></div></section>
-</section>
-</main>
-<dialog id="detailsDialog"><div class="dialogHead"><h2 id="dialogTitle"></h2><button id="closeDialog" class="ghost">إغلاق</button></div><div id="dialogBody"></div></dialog>
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-<script src="app.js"></script>
-</body></html>
+  <header class="topbar">
+    <div>
+      <h1>نظام طلبات الصيانة</h1>
+      <p>إدارة طلبات الصيانة الداخلية</p>
+    </div>
+    <div class="top-actions hidden" id="topActions"><button id="notifyBtn" class="ghost">تفعيل الإشعارات</button><button id="logoutBtn" class="ghost">تسجيل خروج</button></div>
+  </header>
+
+  <main class="container">
+    <section id="loginCard" class="card login-card">
+      <h2>دخول المستخدم</h2>
+      <p class="muted">اكتب اسمك واختر دورك داخل النظام.</p>
+      <label>اسمك</label>
+      <input id="nameInput" type="text" placeholder="مثلاً: أحمد" />
+
+      <label>دورك</label>
+      <select id="roleInput">
+        <option value="member">عضو من الفريق</option>
+        <option value="worker">العامل</option>
+        <option value="admin">المسؤول</option>
+      </select>
+
+      <div id="passwordWrap" class="hidden">
+        <label>كلمة المرور</label>
+        <input id="passwordInput" type="password" placeholder="كلمة المرور" />
+      </div>
+
+      <button id="loginBtn" class="primary">دخول</button>
+      <p id="loginError" class="error"></p>
+    </section>
+
+    <section id="appView" class="hidden">
+      <div class="user-strip card">
+        <div>
+          <strong id="welcomeText"></strong>
+          <p id="roleText" class="muted"></p>
+        </div>
+      </div>
+
+      <section id="requestFormCard" class="card">
+        <h2>إرسال طلب صيانة</h2>
+        <label>عنوان المشكلة</label>
+        <input id="titleInput" type="text" placeholder="مثلاً: تسريب ماء في الدور الثاني" />
+
+        <label>المكان</label>
+        <input id="locationInput" type="text" placeholder="مثلاً: مكتب 3 / المستودع / الحمام" />
+
+        <label>أهمية الطلب</label>
+        <select id="priorityInput">
+          <option value="normal">عادي</option>
+          <option value="important">مهم</option>
+          <option value="urgent">مستعجل</option>
+        </select>
+
+        <label>وصف المشكلة</label>
+        <textarea id="descriptionInput" rows="4" placeholder="اكتب تفاصيل المشكلة..."></textarea>
+
+        <label>صور المشكلة</label>
+        <input id="beforeImagesInput" type="file" accept="image/*" multiple />
+
+        <button id="submitRequestBtn" class="primary">إرسال الطلب</button>
+        <p id="submitMsg" class="success"></p>
+      </section>
+
+      <section class="card notifications-card">
+        <div class="list-header">
+          <h2>الإشعارات</h2>
+          <button id="clearNotifsBtn" class="small-btn">مسح الإشعارات</button>
+        </div>
+        <div id="notificationsList" class="notifications-list"></div>
+      </section>
+
+      <section class="card">
+        <div class="list-header">
+          <h2>طلبات الصيانة</h2>
+          <select id="filterInput">
+            <option value="all">كل الطلبات</option>
+            <option value="new">جديد</option>
+            <option value="progress">قيد التنفيذ</option>
+            <option value="done">تم التنفيذ</option>
+          </select>
+        </div>
+        <div id="requestsList" class="requests-list"></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="imageModal" class="modal hidden">
+    <button id="closeModal" class="modal-close">×</button>
+    <img id="modalImage" alt="صورة مكبرة" />
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
