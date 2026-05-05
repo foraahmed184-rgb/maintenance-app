@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>نظام طلبات الصيانة</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>نظام طلبات الصيانة</h1>
+      <p>تنظيم طلبات الفريق والعامل في مكان واحد</p>
+    </div>
+    <button id="installBtn" class="ghost hidden">تثبيت التطبيق</button>
+  </header>
+
+  <main class="app">
+    <section id="setupCard" class="card warning hidden">
+      <h2>مطلوب ربط Firebase</h2>
+      <p>افتح ملف <b>firebase-config.js</b> وضع بيانات مشروع Firebase ثم فعل Firestore و Storage.</p>
+    </section>
+
+    <section class="card login" id="loginCard">
+      <h2>دخول المستخدم</h2>
+      <p class="muted">اكتب اسمك واختر دورك. هذا النظام داخلي للفريق فقط.</p>
+      <div class="grid two">
+        <label>اسمك
+          <input id="userName" placeholder="مثلاً: أحمد" autocomplete="name" />
+        </label>
+        <label>دورك
+          <select id="userRole">
+            <option value="team">عضو من الفريق</option>
+            <option value="worker">عامل الصيانة</option>
+            <option value="admin">مسؤول</option>
+          </select>
+        </label>
+      </div>
+      <button id="saveUserBtn">دخول</button>
+    </section>
+
+    <section id="mainContent" class="hidden">
+      <nav class="tabs">
+        <button class="tab active" data-view="newRequest">طلب جديد</button>
+        <button class="tab" data-view="requests">كل الطلبات <span id="countBadge">0</span></button>
+        <button class="tab" data-view="worker">لوحة العامل</button>
+      </nav>
+
+      <section id="newRequest" class="view card">
+        <h2>إرسال طلب صيانة</h2>
+        <form id="requestForm">
+          <label>عنوان المشكلة
+            <input id="title" required placeholder="مثلاً: تسريب ماء في دورة المياه" />
+          </label>
+          <div class="grid two">
+            <label>الموقع داخل الشركة
+              <input id="location" required placeholder="مثلاً: الدور الثاني - مكتب 204" />
+            </label>
+            <label>الأولوية
+              <select id="priority">
+                <option value="عادي">عادي</option>
+                <option value="مهم">مهم</option>
+                <option value="عاجل">عاجل</option>
+              </select>
+            </label>
+          </div>
+          <label>وصف المشكلة
+            <textarea id="description" rows="4" required placeholder="اكتب تفاصيل المشكلة بوضوح"></textarea>
+          </label>
+          <label>صور المشكلة، اختياري
+            <input id="requestImages" type="file" accept="image/*" multiple />
+          </label>
+          <button type="submit">إرسال الطلب</button>
+        </form>
+      </section>
+
+      <section id="requests" class="view hidden">
+        <div class="card filters">
+          <h2>كل طلبات الصيانة</h2>
+          <div class="grid three">
+            <select id="statusFilter">
+              <option value="all">كل الحالات</option>
+              <option value="جديد">جديد</option>
+              <option value="قيد التنفيذ">قيد التنفيذ</option>
+              <option value="تم التنفيذ">تم التنفيذ</option>
+              <option value="ملغي">ملغي</option>
+            </select>
+            <select id="priorityFilter">
+              <option value="all">كل الأولويات</option>
+              <option value="عاجل">عاجل</option>
+              <option value="مهم">مهم</option>
+              <option value="عادي">عادي</option>
+            </select>
+            <input id="searchBox" placeholder="بحث بالعنوان أو الموقع أو الطالب" />
+          </div>
+        </div>
+        <div id="requestList" class="requestList"></div>
+      </section>
+
+      <section id="worker" class="view hidden">
+        <div class="card">
+          <h2>لوحة عامل الصيانة</h2>
+          <p class="muted">الطلبات مرتبة: العاجل ثم الأحدث. اضغط على الطلب لتحديث الحالة أو إضافة صور الإنجاز.</p>
+        </div>
+        <div id="workerList" class="requestList"></div>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="detailsDialog">
+    <div class="dialogHead">
+      <h2 id="dialogTitle"></h2>
+      <button id="closeDialog" class="ghost">إغلاق</button>
+    </div>
+    <div id="dialogBody"></div>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
