@@ -1,93 +1,17 @@
-<!doctype html>
-<html lang="ar" dir="rtl">
+<!DOCTYPE html>
+<html lang="ar">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>نظام طلبات الصيانة</title>
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="manifest" href="manifest.json" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maintenance App</title>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <h1>نظام طلبات الصيانة</h1>
-      <p>طلبات الفريق تظهر للجميع مباشرة</p>
-    </div>
-    <button id="logoutBtn" class="ghost hidden">خروج</button>
-  </header>
-
-  <main>
-    <section id="loginView" class="card login-card">
-      <h2>تسجيل الدخول</h2>
-      <label>اسمك</label>
-      <input id="loginName" placeholder="مثلاً: أحمد" autocomplete="name" />
-      <label>دورك</label>
-      <select id="loginRole">
-        <option value="member">عضو من الفريق</option>
-        <option value="worker">العامل</option>
-        <option value="admin">المسؤول</option>
-      </select>
-      <div id="passwordWrap" class="hidden">
-        <label>كلمة المرور</label>
-        <input id="loginPass" type="password" placeholder="كلمة المرور" />
-      </div>
-      <button id="loginBtn" class="primary">دخول</button>
-      
-    </section>
-
-    <section id="appView" class="hidden">
-      <div class="user-line card">
-        <div><strong id="currentUser"></strong><span id="currentRole"></span></div>
-        <span id="syncState">جاري الاتصال...</span>
-      </div>
-
-      <section id="requestFormCard" class="card">
-        <h2>طلب صيانة جديد</h2>
-        <div class="grid">
-          <label>عنوان المشكلة
-            <input id="title" placeholder="مثلاً: مكيف لا يعمل" />
-          </label>
-          <label>الموقع / القسم
-            <input id="location" placeholder="مثلاً: الدور الثاني - مكتب 3" />
-          </label>
-        </div>
-        <label>الأهمية
-          <select id="priority">
-            <option value="normal">عادي</option>
-            <option value="important">مهم</option>
-            <option value="urgent">مستعجل</option>
-          </select>
-        </label>
-        <label>وصف المشكلة
-          <textarea id="description" placeholder="اكتب تفاصيل المشكلة..."></textarea>
-        </label>
-        <label>صور المشكلة (اختياري)
-          <input id="images" type="file" accept="image/*" multiple />
-        </label>
-        <button id="submitRequest" class="primary">إرسال الطلب</button>
-      </section>
-
-      <section class="card">
-        <div class="section-head">
-          <h2>الطلبات</h2>
-          <select id="filterStatus">
-            <option value="all">كل الحالات</option>
-            <option value="new">جديد</option>
-            <option value="progress">قيد التنفيذ</option>
-            <option value="done">تم التنفيذ</option>
-            <option value="cancelled">ملغي</option>
-          </select>
-        </div>
-        <div id="requestsList" class="requests-list"></div>
-      </section>
-    </section>
-  </main>
-
-  <div id="imageModal" class="modal hidden">
-    <button id="closeModal" class="modal-close">×</button>
-    <img id="modalImg" alt="صورة مكبرة" />
-  </div>
-
-  <script type="module" src="app.js"></script>
+<h1>نظام الصيانة</h1>
+<p>تم تعديل النسخة:</p>
+<ul>
+<li>إزالة حالة ملغي من العامل</li>
+<li>إضافة رفع صور الإنجاز</li>
+</ul>
 </body>
 </html>
