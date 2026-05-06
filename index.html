@@ -10,20 +10,20 @@
 <body>
   <header class="topbar">
     <div>
-      <h1>نظام طلبات الصيانة</h1>
-      <p>تنظيم طلبات الصيانة بين الفريق والعامل</p>
+      <h1 data-i18n="appTitle">نظام طلبات الصيانة</h1>
+      <p data-i18n="appSubtitle">تنظيم طلبات الصيانة بين الفريق والعامل والمسؤول</p>
     </div>
-    <button id="logoutBtn" class="ghost hidden">خروج</button>
+    <button id="logoutBtn" class="ghost hidden" data-i18n="logout">خروج</button>
   </header>
 
   <main>
     <section id="loginView" class="card login-card">
-      <h2>الدخول</h2>
+      <h2 data-i18n="login">الدخول</h2>
 
-      <label for="loginName">اسم المستخدم</label>
-      <input id="loginName" type="text" placeholder="اكتب اسمك" />
+      <label for="loginName" data-i18n="username">اسم المستخدم</label>
+      <input id="loginName" type="text" placeholder="اكتب اسمك" autocomplete="off" />
 
-      <label for="loginRole">نوع الحساب</label>
+      <label for="loginRole" data-i18n="accountType">نوع الحساب</label>
       <select id="loginRole">
         <option value="member">عضو فريق 👥</option>
         <option value="worker">عامل 🛠️</option>
@@ -31,71 +31,72 @@
       </select>
 
       <div id="passwordBox" class="hidden">
-        <label for="loginPassword">الرمز</label>
+        <label for="loginPassword" data-i18n="password">الرمز</label>
         <input id="loginPassword" type="password" placeholder="اكتب الرمز" />
       </div>
 
-      <button id="loginBtn">دخول</button>
+      <button id="loginBtn" data-i18n="loginBtn">دخول</button>
     </section>
 
     <section id="appView" class="hidden">
-      <section id="workerUrduNotice" class="card hidden urdu-panel" dir="rtl">
-        <h2>مینٹیننس درخواستیں</h2>
-        <p>یہ صفحہ کاریگر کے لیے اردو میں ہے۔ درخواستوں کی حالت بدلنے کے لیے بٹن استعمال کریں۔</p>
+      <section id="workerUrduNotice" class="card urdu-panel hidden">
+        <h2>د ساتنې غوښتنې</h2>
+        <p>دا پاڼه د کارګر لپاره په پښتو ده. تاسو کولی شئ د غوښتنې حالت بدل کړئ او د کار عکسونه، غږ یا ویډیو اضافه کړئ.</p>
       </section>
+
       <section class="card user-card">
         <div>
-          <div class="muted small">المستخدم الحالي</div>
+          <div class="muted small" data-i18n="currentUser">المستخدم الحالي</div>
           <strong id="currentUserName"></strong>
           <span id="currentRoleBadge" class="role-badge"></span>
         </div>
+        <button id="enableNotifyBtn" class="ghost" data-i18n="enableNotifications">تفعيل الإشعارات</button>
       </section>
 
       <section id="newRequestCard" class="card">
-        <h2>طلب صيانة جديد</h2>
+        <h2 data-i18n="newRequest">طلب صيانة جديد</h2>
 
-        <label for="titleInput">عنوان المشكلة</label>
+        <label for="titleInput" data-i18n="problemTitle">عنوان المشكلة</label>
         <input id="titleInput" type="text" placeholder="مثلاً: مكيف لا يعمل" />
 
-        <label for="descriptionInput">وصف المشكلة والمكان</label>
+        <label for="descriptionInput" data-i18n="problemDesc">وصف المشكلة والمكان</label>
         <textarea id="descriptionInput" rows="4" placeholder="اكتب التفاصيل هنا"></textarea>
 
-        <label for="priorityInput">الأولوية</label>
+        <label for="priorityInput" data-i18n="priority">الأولوية</label>
         <select id="priorityInput">
           <option value="عادي">عادي</option>
           <option value="مهم">مهم</option>
           <option value="مستعجل">مستعجل</option>
         </select>
 
-        <label for="imagesInput">صور المشكلة</label>
+        <label for="imagesInput" data-i18n="problemImages">صور المشكلة</label>
         <input id="imagesInput" type="file" accept="image/*" multiple />
 
-        <label for="videoInput">فيديو المشكلة</label>
+        <label for="videoInput" data-i18n="problemVideo">فيديو المشكلة</label>
         <input id="videoInput" type="file" accept="video/*" />
-        <p class="muted small">الفيديو اختياري، ويفضل أن يكون قصيرًا حتى لا يكون حجمه كبيرًا.</p>
+        <p class="muted small" data-i18n="videoHint">الفيديو اختياري ويجب أن يكون قصيرًا جدًا.</p>
 
-        
-<label>تسجيل صوتي</label>
-<div class="voice-box">
-  <button type="button" id="recordAudioBtn" class="ghost">بدء التسجيل 🎙️</button>
-  <button type="button" id="stopAudioBtn" class="ghost hidden">إيقاف التسجيل ⏹️</button>
-  <audio id="audioPreview" controls class="hidden"></audio>
-</div>
+        <label data-i18n="voiceRecord">تسجيل صوتي</label>
+        <div class="voice-box">
+          <button type="button" id="recordAudioBtn" class="ghost" data-i18n="startRecord">بدء التسجيل 🎙️</button>
+          <button type="button" id="stopAudioBtn" class="ghost hidden" data-i18n="stopRecord">إيقاف التسجيل ⏹️</button>
+          <audio id="audioPreview" controls class="hidden"></audio>
+        </div>
 
-<button id="submitRequestBtn">إرسال الطلب</button>
-        <p class="muted small">يتم ضغط الصور تلقائيًا. الأفضل رفع 1 إلى 3 صور.</p>
+        <button id="submitRequestBtn" data-i18n="sendRequest">إرسال الطلب</button>
+        <p class="muted small" data-i18n="imageHint">يتم ضغط الصور تلقائيًا. الأفضل رفع 1 إلى 3 صور.</p>
       </section>
 
       <section class="card">
         <div class="section-header">
-          <h2>الطلبات</h2>
-          <button id="refreshBtn" class="ghost">تحديث</button>
+          <h2 data-i18n="requests">الطلبات</h2>
+          <button id="refreshBtn" class="ghost" data-i18n="refresh">تحديث</button>
         </div>
         <div id="requestsList" class="requests-list"></div>
       </section>
 
       <section class="card">
-        <h2>الإشعارات داخل التطبيق</h2>
+        <h2 data-i18n="notifications">الإشعارات داخل التطبيق</h2>
         <div id="notificationsList" class="notifications-list"></div>
       </section>
     </section>
