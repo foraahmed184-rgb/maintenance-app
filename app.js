@@ -505,3 +505,25 @@ function sendBrowserNotification(text){
     }
   }catch(e){}
 }
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  const roleSelect = document.getElementById("loginRole");
+  const wrapper = document.getElementById("passwordFieldWrapper");
+
+  function updatePasswordVisibility() {
+    const role = roleSelect ? roleSelect.value : "member";
+
+    if (role === "admin" || role === "worker") {
+      wrapper.style.display = "block";
+    } else {
+      wrapper.style.display = "none";
+    }
+  }
+
+  if(roleSelect){
+    roleSelect.addEventListener("change", updatePasswordVisibility);
+  }
+
+  updatePasswordVisibility();
+});
