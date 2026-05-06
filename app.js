@@ -485,25 +485,37 @@ async function createNotification(text) {
 
 
 
-function setupPasswordVisibility() {
+
+
+
+document.addEventListener("DOMContentLoaded", function () {
   const roleSelect = document.getElementById("loginRole");
   const wrapper = document.getElementById("passwordFieldWrapper");
-  const passwordInput = document.getElementById("loginPassword");
 
-  if (!roleSelect || !wrapper) return;
+  function togglePassword() {
+    if (!roleSelect || !wrapper) return;
 
-  function update() {
-    const needsPassword = roleSelect.value === "admin" || roleSelect.value === "worker";
-    wrapper.classList.toggle("show", needsPassword);
-    if (!needsPassword && passwordInput) passwordInput.value = "";
+    if (roleSelect.value === "admin" || roleSelect.value === "worker") {
+      wrapper.style.display = "block";
+    } else {
+      wrapper.style.display = "none";
+    }
   }
 
-  roleSelect.addEventListener("change", update);
-  update();
-}
+  if (roleSelect) {
+    roleSelect.addEventListener("change", togglePassword);
+    togglePassword();
+  }
+});
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", setupPasswordVisibility);
-} else {
-  setupPasswordVisibility();
+function checkLoginRole(name, role, password) {
+  if (role === "admin") {
+    return name === "Ahmed" && password === "2006";
+  }
+
+  if (role === "worker") {
+    return name === "هارون" && password === "1111";
+  }
+
+  return true;
 }
