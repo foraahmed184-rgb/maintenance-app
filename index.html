@@ -1,112 +1,88 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>نظام طلبات الصيانة</title>
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="manifest" href="manifest.json" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>نظام الصيانة</title>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <h1 data-i18n="appTitle">نظام طلبات الصيانة</h1>
-      <p data-i18n="appSubtitle">تنظيم طلبات الصيانة بين الفريق والعامل والمسؤول</p>
-    </div>
-    <button id="logoutBtn" class="ghost hidden" data-i18n="logout">خروج</button>
-  </header>
+<header>
+<h1>نظام طلبات الصيانة</h1>
+<button id="logoutBtn" class="hidden">خروج</button>
+</header>
 
-  <main>
-    <section id="loginView" class="card login-card">
-      <h2 data-i18n="login">الدخول</h2>
+<section id="loginBox" class="card">
+<h2>تسجيل الدخول</h2>
 
-      <label for="loginName" data-i18n="username">اسم المستخدم</label>
-      <input id="loginName" type="text" placeholder="اكتب اسمك" autocomplete="off" />
+<label>اسم المستخدم</label>
+<input id="username">
 
-      <label for="loginRole" data-i18n="accountType">نوع الحساب</label>
-      <select id="loginRole">
-        <option value="member">عضو فريق 👥</option>
-        <option value="worker">عامل 🛠️</option>
-        <option value="admin">مسؤول 👑</option>
-      </select>
+<label>نوع الحساب</label>
+<select id="role">
+<option value="member">عضو فريق</option>
+<option value="worker">عامل</option>
+<option value="admin">مسؤول</option>
+</select>
 
-      <div id="passwordBox" class="hidden">
-        <label for="loginPassword" data-i18n="password">الرمز</label>
-        <input id="loginPassword" type="password" placeholder="اكتب الرمز" />
-      </div>
+<div id="passwordArea" class="hidden">
+<label>الرمز</label>
+<input id="password" type="password">
+</div>
 
-      <button id="loginBtn" data-i18n="loginBtn">دخول</button>
-    </section>
+<button id="loginBtn">دخول</button>
+</section>
 
-    <section id="appView" class="hidden">
-      <section id="workerUrduNotice" class="card urdu-panel hidden">
-        <h2>د ساتنې غوښتنې</h2>
-        <p>دا پاڼه د کارګر لپاره په پښتو ده. تاسو کولی شئ د غوښتنې حالت بدل کړئ او د کار عکسونه، غږ یا ویډیو اضافه کړئ.</p>
-      </section>
+<section id="app" class="hidden">
 
-      <section class="card user-card">
-        <div>
-          <div class="muted small" data-i18n="currentUser">المستخدم الحالي</div>
-          <strong id="currentUserName"></strong>
-          <span id="currentRoleBadge" class="role-badge"></span>
-        </div>
-        <button id="enableNotifyBtn" class="ghost" data-i18n="enableNotifications">تفعيل الإشعارات</button>
-      </section>
+<div id="workerNotice" class="card hidden">
+<h3>د ساتنې غوښتنې</h3>
+<p>دا د کارګر پاڼه ده.</p>
+</div>
 
-      <section id="newRequestCard" class="card">
-        <h2 data-i18n="newRequest">طلب صيانة جديد</h2>
+<section id="newRequest" class="card">
+<h2>طلب جديد</h2>
 
-        <label for="titleInput" data-i18n="problemTitle">عنوان المشكلة</label>
-        <input id="titleInput" type="text" placeholder="مثلاً: مكيف لا يعمل" />
+<input id="title" placeholder="عنوان المشكلة">
+<textarea id="desc" placeholder="وصف المشكلة"></textarea>
 
-        <label for="descriptionInput" data-i18n="problemDesc">وصف المشكلة والمكان</label>
-        <textarea id="descriptionInput" rows="4" placeholder="اكتب التفاصيل هنا"></textarea>
+<select id="priority">
+<option>عادي</option>
+<option>مهم</option>
+<option>مستعجل</option>
+</select>
 
-        <label for="priorityInput" data-i18n="priority">الأولوية</label>
-        <select id="priorityInput">
-          <option value="عادي">عادي</option>
-          <option value="مهم">مهم</option>
-          <option value="مستعجل">مستعجل</option>
-        </select>
+<label>صور</label>
+<input id="images" type="file" accept="image/*" multiple>
 
-        <label for="imagesInput" data-i18n="problemImages">صور المشكلة</label>
-        <input id="imagesInput" type="file" accept="image/*" multiple />
+<label>فيديو</label>
+<input id="video" type="file" accept="video/*">
 
-        <label for="videoInput" data-i18n="problemVideo">فيديو المشكلة</label>
-        <input id="videoInput" type="file" accept="video/*" />
-        <p class="muted small" data-i18n="videoHint">الفيديو اختياري ويجب أن يكون قصيرًا جدًا.</p>
+<div class="voice">
+<button id="startVoice">بدء تسجيل</button>
+<button id="stopVoice" class="hidden">إيقاف</button>
+<audio id="voicePreview" controls class="hidden"></audio>
+</div>
 
-        <label data-i18n="voiceRecord">تسجيل صوتي</label>
-        <div class="voice-box">
-          <button type="button" id="recordAudioBtn" class="ghost" data-i18n="startRecord">بدء التسجيل 🎙️</button>
-          <button type="button" id="stopAudioBtn" class="ghost hidden" data-i18n="stopRecord">إيقاف التسجيل ⏹️</button>
-          <audio id="audioPreview" controls class="hidden"></audio>
-        </div>
+<button id="sendBtn">إرسال الطلب</button>
+</section>
 
-        <button id="submitRequestBtn" data-i18n="sendRequest">إرسال الطلب</button>
-        <p class="muted small" data-i18n="imageHint">يتم ضغط الصور تلقائيًا. الأفضل رفع 1 إلى 3 صور.</p>
-      </section>
+<section class="card">
+<h2>الطلبات</h2>
+<div id="requests"></div>
+</section>
 
-      <section class="card">
-        <div class="section-header">
-          <h2 data-i18n="requests">الطلبات</h2>
-          <button id="refreshBtn" class="ghost" data-i18n="refresh">تحديث</button>
-        </div>
-        <div id="requestsList" class="requests-list"></div>
-      </section>
+<section class="card">
+<h2>الإشعارات</h2>
+<div id="notifications"></div>
+</section>
 
-      <section class="card">
-        <h2 data-i18n="notifications">الإشعارات داخل التطبيق</h2>
-        <div id="notificationsList" class="notifications-list"></div>
-      </section>
-    </section>
-  </main>
+</section>
 
-  <div id="imageModal" class="modal hidden">
-    <button id="closeModalBtn" class="modal-close">×</button>
-    <img id="modalImage" alt="صورة مكبرة" />
-  </div>
+<div id="modal" class="hidden">
+<img id="modalImg">
+</div>
 
-  <script type="module" src="app.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>
