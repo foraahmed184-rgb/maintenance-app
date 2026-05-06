@@ -42,6 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("closeModalBtn").addEventListener("click", closeImageModal);
 
   updatePasswordVisibility();
+  setupAudioRecorder();
 
   const savedUser = localStorage.getItem("maintenance_current_user");
   const savedRole = localStorage.getItem("maintenance_current_role");
@@ -111,6 +112,7 @@ function showApp() {
   $("currentUserName").textContent = currentUser;
   $("currentRoleBadge").textContent = getRoleLabel(currentRole);
 
+  applyWorkerUrduMode();
   listenRequests();
   listenNotifications();
 }
@@ -183,6 +185,8 @@ async function submitRequest() {
 
   try {
     const images = await getCompressedImages($("imagesInput"));
+    const videoFile = $("videoInput")?.files?.[0];
+    const videoBase64 = await fileToBase64Limited(videoFile);
 
     await addDoc(requestsRef, {
       title,
@@ -193,6 +197,8 @@ async function submitRequest() {
       createdAt: serverTimestamp(),
       images,
       doneImages: [],
+      voiceAudio: audioBase64,
+      video: videoBase64,
       comments: [
         {
           by: currentUser,
@@ -209,6 +215,10 @@ async function submitRequest() {
     $("descriptionInput").value = "";
     $("priorityInput").value = "عادي";
     $("imagesInput").value = "";
+    if ($("videoInput")) $("videoInput").value = "";
+    audioBase64 = "";
+    const ap = document.getElementById("audioPreview");
+    if (ap) { ap.src = ""; ap.classList.add("hidden"); }
 
     alert("تم إرسال الطلب ✅");
   } catch (error) {
@@ -290,6 +300,10 @@ function renderRequestCard(request) {
     .map((src) => `<img src="${src}" data-image="${src}" alt="صورة المشكلة">`)
     .join("");
 
+  const videoHtml = request.video ? `<div class="videos"><strong>فيديو المشكلة</strong><video src="${request.video}" controls></video></div>` : "";
+
+  const voiceAudioHtml = request.voiceAudio ? `<div class="audio-list"><strong>${urduText("تسجيل صوتي")}</strong><audio src="${request.voiceAudio}" controls></audio></div>` : "";
+
   const doneImagesHtml = (request.doneImages || [])
     .map((src) => `<img src="${src}" data-image="${src}" alt="صورة الإنجاز">`)
     .join("");
@@ -309,11 +323,11 @@ function renderRequestCard(request) {
   let actionsHtml = "";
 
   if (canChangeStatus && request.status !== "قيد التنفيذ") {
-    actionsHtml += `<button class="warning" data-action="progress" data-id="${request.id}">قيد التنفيذ</button>`;
+    actionsHtml += `<button class="warning" data-action="progress" data-id="${request.id}">${urduText("قيد التنفيذ")}</button>`;
   }
 
   if (canChangeStatus && request.status !== "تم التنفيذ") {
-    actionsHtml += `<button class="success" data-action="done" data-id="${request.id}">تم التنفيذ</button>`;
+    actionsHtml += `<button class="success" data-action="done" data-id="${request.id}">${urduText("تم التنفيذ")}</button>`;
   }
 
   if (canDelete) {
@@ -327,9 +341,9 @@ function renderRequestCard(request) {
   const doneUploadHtml = canChangeStatus
     ? `
       <div class="done-box">
-        <label>صور الإنجاز</label>
+        <label>${urduText("صور الإنجاز")}</label>
         <input id="doneImages-${request.id}" type="file" accept="image/*" multiple>
-        <button data-action="uploadDoneImages" data-id="${request.id}">رفع صور الإنجاز</button>
+        <button data-action="uploadDoneImages" data-id="${request.id}">${urduText("رفع صور الإنجاز")}</button>
       </div>
     `
     : "";
@@ -339,18 +353,20 @@ function renderRequestCard(request) {
       <div class="request-top">
         <div>
           <div class="request-title">${escapeHtml(request.title || "طلب صيانة")}</div>
-          <div class="meta">المرسل: ${escapeHtml(request.createdBy || "غير معروف")}</div>
+          <div class="meta">${urduText("المرسل")}: ${escapeHtml(request.createdBy || "غير معروف")}</div>
         </div>
 
         <div class="badges">
-          <span class="badge ${priorityBadgeClass}">${escapeHtml(request.priority || "عادي")}</span>
-          <span class="badge ${statusBadgeClass}">${escapeHtml(request.status || "جديد")}</span>
+          <span class="badge ${priorityBadgeClass}">${escapeHtml(urduText(request.priority || "عادي"))}</span>
+          <span class="badge ${statusBadgeClass}">${escapeHtml(urduText(request.status || "جديد"))}</span>
         </div>
       </div>
 
       <div class="description">${escapeHtml(request.description || "")}</div>
 
-      ${imagesHtml ? `<strong>صور المشكلة</strong><div class="images">${imagesHtml}</div>` : ""}
+      ${imagesHtml ? `<strong>${urduText("صور المشكلة")}</strong><div class="images">${imagesHtml}</div>` : ""}
+      ${voiceAudioHtml}
+      ${videoHtml}
       ${doneImagesHtml ? `<strong>صور الإنجاز</strong><div class="images">${doneImagesHtml}</div>` : ""}
 
       ${doneUploadHtml}
@@ -532,4 +548,111 @@ function pushLocalNotification(text) {
   } catch (e) {
     console.log(e);
   }
+}
+
+
+let audioBase64 = "";
+let mediaRecorder = null;
+let audioChunks = [];
+
+async function setupAudioRecorder() {
+  const recordBtn = document.getElementById("recordAudioBtn");
+  const stopBtn = document.getElementById("stopAudioBtn");
+  const preview = document.getElementById("audioPreview");
+  if (!recordBtn || !stopBtn || !preview) return;
+
+  recordBtn.addEventListener("click", async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunks.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(audioChunks, { type: "audio/webm" });
+        if (blob.size > 700000) {
+          alert("التسجيل طويل. خليه قصير أقل من دقيقة تقريبًا.");
+          audioBase64 = "";
+          preview.classList.add("hidden");
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        audioBase64 = await blobToBase64(blob);
+        preview.src = audioBase64;
+        preview.classList.remove("hidden");
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      recordBtn.classList.add("hidden");
+      stopBtn.classList.remove("hidden");
+    } catch (e) {
+      alert("المتصفح لم يسمح بالمايكروفون");
+    }
+  });
+
+  stopBtn.addEventListener("click", () => {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+    stopBtn.classList.add("hidden");
+    recordBtn.classList.remove("hidden");
+  });
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function applyWorkerUrduMode() {
+  const panel = document.getElementById("workerUrduNotice");
+  if (!panel) return;
+  if (currentRole === "worker") {
+    panel.classList.remove("hidden");
+    document.documentElement.lang = "ur";
+  } else {
+    panel.classList.add("hidden");
+    document.documentElement.lang = "ar";
+  }
+}
+
+function urduText(text) {
+  const map = {
+    "الطلبات":"درخواستیں",
+    "قيد التنفيذ":"کام جاری ہے",
+    "تم التنفيذ":"کام مکمل ہوگیا",
+    "صور الإنجاز":"کام مکمل ہونے کی تصاویر",
+    "رفع صور الإنجاز":"مکمل کام کی تصاویر اپلوڈ کریں",
+    "لا توجد طلبات حالياً.":"فی الحال کوئی درخواست نہیں۔",
+    "المرسل":"بھیجنے والا",
+    "صور المشكلة":"مسئلہ کی تصاویر",
+    "جديد":"نئی",
+    "عادي":"عام",
+    "مهم":"اہم",
+    "مستعجل":"فوری",
+    "تسجيل صوتي":"آواز کی ریکارڈنگ"
+  };
+  return currentRole === "worker" ? (map[text] || text) : text;
+}
+
+
+async function fileToBase64Limited(file, maxBytes = 1500000) {
+  if (!file) return "";
+  if (file.size > maxBytes) {
+    alert("حجم الفيديو كبير. اختر فيديو قصير جدًا أو قلل الجودة.");
+    return "";
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }

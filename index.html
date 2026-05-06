@@ -39,6 +39,10 @@
     </section>
 
     <section id="appView" class="hidden">
+      <section id="workerUrduNotice" class="card hidden urdu-panel" dir="rtl">
+        <h2>مینٹیننس درخواستیں</h2>
+        <p>یہ صفحہ کاریگر کے لیے اردو میں ہے۔ درخواستوں کی حالت بدلنے کے لیے بٹن استعمال کریں۔</p>
+      </section>
       <section class="card user-card">
         <div>
           <div class="muted small">المستخدم الحالي</div>
@@ -66,7 +70,19 @@
         <label for="imagesInput">صور المشكلة</label>
         <input id="imagesInput" type="file" accept="image/*" multiple />
 
-        <button id="submitRequestBtn">إرسال الطلب</button>
+        <label for="videoInput">فيديو المشكلة</label>
+        <input id="videoInput" type="file" accept="video/*" />
+        <p class="muted small">الفيديو اختياري، ويفضل أن يكون قصيرًا حتى لا يكون حجمه كبيرًا.</p>
+
+        
+<label>تسجيل صوتي</label>
+<div class="voice-box">
+  <button type="button" id="recordAudioBtn" class="ghost">بدء التسجيل 🎙️</button>
+  <button type="button" id="stopAudioBtn" class="ghost hidden">إيقاف التسجيل ⏹️</button>
+  <audio id="audioPreview" controls class="hidden"></audio>
+</div>
+
+<button id="submitRequestBtn">إرسال الطلب</button>
         <p class="muted small">يتم ضغط الصور تلقائيًا. الأفضل رفع 1 إلى 3 صور.</p>
       </section>
 

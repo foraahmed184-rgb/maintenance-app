@@ -348,3 +348,19 @@ button.danger {
     font-size: 15px;
   }
 }
+
+.voice-box{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 12px}
+.voice-box audio{width:100%;margin-top:8px}
+.urdu-panel{background:#eef7ff;border-color:#bfdbfe}
+.audio-list audio{width:100%;margin-top:8px}
+
+.videos {
+  margin: 10px 0;
+}
+.videos video {
+  width: 100%;
+  max-height: 260px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #000;
+}
