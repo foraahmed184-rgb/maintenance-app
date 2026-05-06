@@ -113,6 +113,7 @@ function showApp() {
   $("currentRoleBadge").textContent = getRoleLabel(currentRole);
 
   applyWorkerUrduMode();
+  updateRoleBasedUI();
   listenRequests();
   listenNotifications();
 }
@@ -184,6 +185,21 @@ async function submitRequest() {
   $("submitRequestBtn").textContent = "جاري الإرسال...";
 
   try {
+    if (action === "startWorkerAudio") {
+      await startWorkerAudio(id, event.currentTarget);
+      return;
+    }
+
+    if (action === "stopWorkerAudio") {
+      stopWorkerAudio(id, event.currentTarget);
+      return;
+    }
+
+    if (action === "uploadWorkerMedia") {
+      await uploadWorkerMedia(id);
+      return;
+    }
+
     const images = await getCompressedImages($("imagesInput"));
     const videoFile = $("videoInput")?.files?.[0];
     const videoBase64 = await fileToBase64Limited(videoFile);
@@ -316,6 +332,10 @@ function renderRequestCard(request) {
     `)
     .join("");
 
+  
+  const workerAudioHtml = request.workerAudio ? `<div class="audio-list"><strong>شرح العامل بالصوت</strong><audio src="${request.workerAudio}" controls preload="metadata"></audio></div>` : "";
+  const workerVideoHtml = request.workerVideo ? `<div class="videos"><strong>فيديو شرح العامل</strong><video src="${request.workerVideo}" controls></video></div>` : "";
+
   const canChangeStatus = currentRole === "worker" || currentRole === "admin";
   const canDelete = currentRole === "admin";
   const canRemind = currentRole === "member";
@@ -369,7 +389,10 @@ function renderRequestCard(request) {
       ${videoHtml}
       ${doneImagesHtml ? `<strong>صور الإنجاز</strong><div class="images">${doneImagesHtml}</div>` : ""}
 
+      ${workerAudioHtml}
+      ${workerVideoHtml}
       ${doneUploadHtml}
+      ${workerMediaHtml(request.id)}
 
       <div class="actions">${actionsHtml}</div>
 
@@ -664,4 +687,128 @@ async function fileToBase64Limited(file, maxBytes = 1500000) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+
+function updateRoleBasedUI() {
+  const newRequestCard = document.getElementById("newRequestCard");
+  if (newRequestCard) {
+    if (currentRole === "worker") {
+      newRequestCard.classList.add("hidden");
+    } else {
+      newRequestCard.classList.remove("hidden");
+    }
+  }
+}
+
+
+let workerAudioRecorders = {};
+
+function workerMediaHtml(requestId) {
+  if (currentRole !== "worker" && currentRole !== "admin") return "";
+
+  return `
+    <div class="done-box worker-media-box">
+      <label>شرح العامل بالصوت</label>
+      <div class="voice-box">
+        <button type="button" class="ghost" data-action="startWorkerAudio" data-id="${requestId}">بدء تسجيل شرح العامل 🎙️</button>
+        <button type="button" class="ghost hidden" data-action="stopWorkerAudio" data-id="${requestId}">إيقاف التسجيل ⏹️</button>
+        <audio id="workerAudioPreview-${requestId}" controls class="hidden"></audio>
+      </div>
+
+      <label>فيديو شرح العامل</label>
+      <input id="workerVideo-${requestId}" type="file" accept="video/*">
+
+      <button data-action="uploadWorkerMedia" data-id="${requestId}">حفظ شرح العامل</button>
+    </div>
+  `;
+}
+
+async function startWorkerAudio(requestId, startBtn) {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const chunks = [];
+
+    let mimeType = "audio/webm";
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/mp4")) {
+      mimeType = "audio/mp4";
+    } else if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm")) {
+      mimeType = "audio/webm";
+    }
+
+    const recorder = new MediaRecorder(stream, { mimeType });
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
+
+    recorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType });
+
+      if (blob.size > 2000000) {
+        alert("التسجيل طويل. خليه أقصر.");
+        workerAudioRecorders[requestId].audio = "";
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
+      const audio = await blobToBase64(blob);
+      workerAudioRecorders[requestId].audio = audio;
+
+      const preview = document.getElementById(`workerAudioPreview-${requestId}`);
+      if (preview) {
+        preview.src = audio;
+        preview.classList.remove("hidden");
+      }
+
+      stream.getTracks().forEach(track => track.stop());
+    };
+
+    workerAudioRecorders[requestId] = { recorder, audio: "" };
+    recorder.start();
+
+    const stopBtn = document.querySelector(`[data-action="stopWorkerAudio"][data-id="${requestId}"]`);
+    if (startBtn) startBtn.classList.add("hidden");
+    if (stopBtn) stopBtn.classList.remove("hidden");
+  } catch (e) {
+    alert("المتصفح لم يسمح بالمايكروفون");
+    console.log(e);
+  }
+}
+
+function stopWorkerAudio(requestId, stopBtn) {
+  const item = workerAudioRecorders[requestId];
+  if (item && item.recorder && item.recorder.state !== "inactive") {
+    item.recorder.stop();
+  }
+
+  const startBtn = document.querySelector(`[data-action="startWorkerAudio"][data-id="${requestId}"]`);
+  if (stopBtn) stopBtn.classList.add("hidden");
+  if (startBtn) startBtn.classList.remove("hidden");
+}
+
+async function uploadWorkerMedia(requestId) {
+  const requestDoc = doc(db, "requests", requestId);
+  const videoInput = document.getElementById(`workerVideo-${requestId}`);
+  const workerVideoFile = videoInput?.files?.[0];
+  const workerVideo = await fileToBase64Limited(workerVideoFile);
+  const workerAudio = workerAudioRecorders[requestId]?.audio || "";
+
+  if (!workerAudio && !workerVideo) {
+    alert("سجل صوت أو أضف فيديو أولاً");
+    return;
+  }
+
+  await updateDoc(requestDoc, {
+    workerAudio: workerAudio || "",
+    workerVideo: workerVideo || "",
+    comments: arrayUnion({
+      by: currentUser,
+      text: "أضاف العامل شرح صوتي/فيديو للإنجاز",
+      at: new Date().toISOString()
+    })
+  });
+
+  await addNotification(`${currentUser} أضاف شرح للإنجاز`);
+  alert("تم حفظ شرح العامل ✅");
 }
