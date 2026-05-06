@@ -39,28 +39,31 @@ $("submitRequestBtn").addEventListener("click", submitRequest);
 $("refreshBtn").addEventListener("click", () => location.reload());
 $("closeModalBtn").addEventListener("click", closeImageModal);
 
-function getRole(name) {
+function getRole(name, code) {
   const clean = String(name || "").trim();
-  if (clean === "Ahmed") return "admin";
-  if (clean === "هارون") return "worker";
+
+  if (clean === "Ahmed" && code === "2006") return "admin";
+  if (clean === "هارون" && code === "1111") return "worker";
+
   return "member";
 }
 
 function getRoleLabel(role) {
-  if (role === "admin") return "مسؤول";
-  if (role === "worker") return "عامل";
+  if (role === "admin") return "👑 مسؤول";
+  if (role === "worker") return "🛠️ عامل";
   return "عضو فريق";
 }
 
 function login() {
   const name = $("loginName").value.trim();
+  const code = $("loginCode").value.trim();
   if (!name) {
     alert("اكتب اسمك");
     return;
   }
 
   currentUser = name;
-  currentRole = getRole(name);
+  currentRole = getRole(name, code);
 
   localStorage.setItem("maintenance_current_user", currentUser);
 

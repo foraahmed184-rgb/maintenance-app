@@ -354,3 +354,22 @@ button.danger {
     font-size: 15px;
   }
 }
+
+input[type="password"]{
+margin-top:10px;
+}
+
+.request-card.priority-normal{
+border-right-color:#22c55e;
+background:#f0fdf4;
+}
+
+.request-card.priority-important{
+border-right-color:#f59e0b;
+background:#fffbeb;
+}
+
+.request-card.priority-urgent{
+border-right-color:#ef4444;
+background:#fef2f2;
+}
