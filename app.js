@@ -1,16 +1,16 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getFirestore,
   collection,
   addDoc,
+  onSnapshot,
   doc,
   updateDoc,
   deleteDoc,
-  onSnapshot,
   serverTimestamp,
   query,
   orderBy
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCK7gJ9-zUiygiYHJVwYFb6nUBweptV3XI",
@@ -23,58 +23,42 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const requestsRef = collection(db, "requests");
+const notificationsRef = collection(db, "notifications");
 
 const $ = (id) => document.getElementById(id);
-const loginView = $("loginView");
-const appView = $("appView");
-const syncStatus = $("syncStatus");
-const loginName = $("loginName");
-const loginRole = $("loginRole");
-const loginPin = $("loginPin");
-const pinBox = $("pinBox");
+const loginCard = $("loginCard");
+const appArea = $("appArea");
+const passwordWrap = $("passwordWrap");
+const userRole = $("userRole");
+const password = $("password");
+const userName = $("userName");
 const loginBtn = $("loginBtn");
 const logoutBtn = $("logoutBtn");
-const welcomeText = $("welcomeText");
-const roleText = $("roleText");
-const submitRequestBtn = $("submitRequestBtn");
+const sendBtn = $("sendBtn");
 const requestsList = $("requestsList");
 const notificationsList = $("notificationsList");
-const filterStatus = $("filterStatus");
-const notifyBtn = $("notifyBtn");
+const statusFilter = $("statusFilter");
 
 let currentUser = JSON.parse(localStorage.getItem("maintenanceUser") || "null");
 let allRequests = [];
-let allNotifications = [];
-let firstLoadDone = false;
+let lastNotificationCount = 0;
 
-const roleLabels = {
-  member: "عضو من الفريق",
-  worker: "عامل الصيانة",
-  admin: "المسؤول"
-};
-const statusLabels = {
-  new: "جديد",
-  in_progress: "قيد التنفيذ",
-  done: "تم التنفيذ",
-  cancelled: "ملغي"
-};
-const priorityLabels = {
-  normal: "عادي",
-  important: "مهم",
-  urgent: "مستعجل"
-};
+const roleNames = { member: "عضو من الفريق", worker: "عامل الصيانة", admin: "مسؤول" };
+const statusNames = { new: "جديد", progress: "قيد التنفيذ", done: "تم التنفيذ", cancelled: "ملغي" };
+const priorityNames = { normal: "عادي", important: "مهم", urgent: "مستعجل" };
 
-loginRole.addEventListener("change", () => {
-  pinBox.classList.toggle("hidden", loginRole.value === "member");
+userRole.addEventListener("change", () => {
+  passwordWrap.classList.toggle("hidden", userRole.value === "member");
 });
 
 loginBtn.addEventListener("click", () => {
-  const name = loginName.value.trim();
-  const role = loginRole.value;
-  const pin = loginPin.value.trim();
+  const name = userName.value.trim();
+  const role = userRole.value;
+  const pass = password.value.trim();
   if (!name) return alert("اكتب اسمك أولاً");
-  if (role === "admin" && pin !== "1234") return alert("كلمة مرور المسؤول غير صحيحة");
-  if (role === "worker" && pin !== "0000") return alert("كلمة مرور العامل غير صحيحة");
+  if (role === "admin" && !(name.toLowerCase() === "admin" && pass === "1234")) return alert("بيانات المسؤول غير صحيحة");
+  if (role === "worker" && pass !== "0000") return alert("كلمة مرور العامل غير صحيحة");
   currentUser = { name, role };
   localStorage.setItem("maintenanceUser", JSON.stringify(currentUser));
   showApp();
@@ -83,113 +67,144 @@ loginBtn.addEventListener("click", () => {
 logoutBtn.addEventListener("click", () => {
   localStorage.removeItem("maintenanceUser");
   currentUser = null;
-  location.reload();
-});
-
-notifyBtn.addEventListener("click", async () => {
-  if (!("Notification" in window)) return alert("متصفحك لا يدعم الإشعارات");
-  const result = await Notification.requestPermission();
-  alert(result === "granted" ? "تم تفعيل إشعارات المتصفح" : "لم يتم تفعيل الإشعارات");
+  loginCard.classList.remove("hidden");
+  appArea.classList.add("hidden");
+  logoutBtn.classList.add("hidden");
 });
 
 function showApp() {
-  loginView.classList.add("hidden");
-  appView.classList.remove("hidden");
+  loginCard.classList.add("hidden");
+  appArea.classList.remove("hidden");
   logoutBtn.classList.remove("hidden");
-  welcomeText.textContent = `مرحباً، ${currentUser.name}`;
-  roleText.textContent = `الدور: ${roleLabels[currentUser.role]}`;
-  if (currentUser.role === "worker") {
-    $("requestFormCard").classList.add("hidden");
-  }
-  startRealtime();
+  $("currentUserLabel").textContent = currentUser.name;
+  $("roleLabel").textContent = roleNames[currentUser.role];
 }
 
-function fileToDataUrl(file) {
+if (currentUser) showApp();
+
+async function compressImage(file, maxWidth = 650, quality = 0.5) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
     reader.onerror = reject;
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = event.target.result;
+    };
     reader.readAsDataURL(file);
   });
 }
 
-async function readImages(input) {
-  const files = Array.from(input.files || []).slice(0, 3);
-  const images = [];
+async function filesToCompressedBase64(input) {
+  const files = Array.from(input.files || []).slice(0, 4);
+  const results = [];
   for (const file of files) {
-    if (file.size > 900000) {
-      alert(`الصورة ${file.name} كبيرة. اختر صورة أقل من 900KB أو صغرها.`);
-      continue;
+    if (!file.type.startsWith("image/")) continue;
+    const compressed = await compressImage(file);
+    // Skip if somehow still too big
+    if (compressed.length > 900000) {
+      const smaller = await compressImage(file, 450, 0.38);
+      results.push(smaller);
+    } else {
+      results.push(compressed);
     }
-    images.push(await fileToDataUrl(file));
   }
-  return images;
+  return results;
 }
 
-submitRequestBtn.addEventListener("click", async () => {
+sendBtn.addEventListener("click", async () => {
   if (!currentUser) return alert("سجل الدخول أولاً");
-  const title = $("titleInput").value.trim();
-  const locationText = $("locationInput").value.trim();
-  const desc = $("descInput").value.trim();
-  const priority = $("priorityInput").value;
-  if (!title || !desc) return alert("اكتب عنوان الطلب ووصف المشكلة");
-
-  submitRequestBtn.disabled = true;
-  submitRequestBtn.textContent = "جاري الإرسال...";
+  const title = $("title").value.trim();
+  const description = $("description").value.trim();
+  const priority = $("priority").value;
+  if (!title || !description) return alert("اكتب عنوان ووصف المشكلة");
+  sendBtn.disabled = true;
+  sendBtn.textContent = "جاري الإرسال...";
   try {
-    const beforeImages = await readImages($("beforeImages"));
-    const requestRef = await addDoc(collection(db, "maintenanceRequests"), {
+    const images = await filesToCompressedBase64($("images"));
+    await addDoc(requestsRef, {
       title,
-      location: locationText,
-      description: desc,
+      description,
       priority,
       status: "new",
-      requesterName: currentUser.name,
+      requestedBy: currentUser.name,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      beforeImages,
-      afterImages: [],
-      reminders: 0,
-      lastReminderBy: "",
-      comments: []
+      images,
+      doneImages: [],
+      comments: [{ by: currentUser.name, text: "تم إنشاء الطلب", at: new Date().toISOString() }]
     });
-    await createNotification(`طلب جديد من ${currentUser.name}: ${title}`, requestRef.id);
-    $("titleInput").value = "";
-    $("locationInput").value = "";
-    $("descInput").value = "";
-    $("beforeImages").value = "";
-    alert("تم إرسال الطلب ووصل للجميع");
+    await addNotification(`طلب جديد: ${title} بواسطة ${currentUser.name}`);
+    $("title").value = "";
+    $("description").value = "";
+    $("images").value = "";
+    alert("تم إرسال الطلب ✅");
   } catch (err) {
     console.error(err);
-    alert("صار خطأ أثناء الإرسال. تأكد أن Firestore في test mode وأن الإنترنت يعمل.");
+    alert("صار خطأ أثناء إرسال الطلب. جرّب صورة أصغر أو صورة واحدة فقط.");
   } finally {
-    submitRequestBtn.disabled = false;
-    submitRequestBtn.textContent = "إرسال الطلب";
+    sendBtn.disabled = false;
+    sendBtn.textContent = "إرسال الطلب";
   }
 });
 
-function startRealtime() {
-  syncStatus.textContent = "متصل - الطلبات تظهر للجميع مباشرة";
-  const reqQ = query(collection(db, "maintenanceRequests"), orderBy("createdAt", "desc"));
-  onSnapshot(reqQ, (snapshot) => {
-    allRequests = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderRequests();
-  }, (err) => {
-    console.error(err);
-    syncStatus.textContent = "مشكلة اتصال بقاعدة البيانات";
-  });
+async function addNotification(text) {
+  await addDoc(notificationsRef, { text, at: serverTimestamp(), by: currentUser?.name || "النظام" });
+}
 
-  const notQ = query(collection(db, "maintenanceNotifications"), orderBy("createdAt", "desc"));
-  onSnapshot(notQ, (snapshot) => {
-    const previousCount = allNotifications.length;
-    allNotifications = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderNotifications();
-    if (firstLoadDone && allNotifications.length > previousCount) {
-      const n = allNotifications[0];
-      showBrowserNotification(n.message || "تحديث جديد في طلبات الصيانة");
-    }
-    firstLoadDone = true;
+async function changeStatus(id, status, title) {
+  if (!currentUser || !["worker", "admin"].includes(currentUser.role)) return alert("تغيير الحالة للعامل أو المسؤول فقط");
+  await updateDoc(doc(db, "requests", id), {
+    status,
+    updatedAt: serverTimestamp()
   });
+  await addNotification(`تم تغيير حالة الطلب (${title}) إلى: ${statusNames[status]} بواسطة ${currentUser.name}`);
+}
+
+async function deleteRequest(id, title) {
+  if (currentUser?.role !== "admin") return alert("الحذف للمسؤول فقط");
+  if (!confirm("متأكد من حذف الطلب؟")) return;
+  await deleteDoc(doc(db, "requests", id));
+  await addNotification(`تم حذف الطلب (${title}) بواسطة المسؤول`);
+}
+
+async function sendReminder(id, title) {
+  if (!currentUser) return;
+  const req = allRequests.find(r => r.id === id);
+  const comments = [...(req.comments || []), { by: currentUser.name, text: "تذكير: الطلب متأخر ويحتاج متابعة", at: new Date().toISOString() }];
+  await updateDoc(doc(db, "requests", id), { comments, updatedAt: serverTimestamp() });
+  await addNotification(`تذكير على الطلب (${title}) بواسطة ${currentUser.name}`);
+}
+
+async function addComment(id) {
+  if (!currentUser) return;
+  const input = document.querySelector(`[data-comment-input="${id}"]`);
+  const text = input.value.trim();
+  if (!text) return;
+  const req = allRequests.find(r => r.id === id);
+  const comments = [...(req.comments || []), { by: currentUser.name, text, at: new Date().toISOString() }];
+  await updateDoc(doc(db, "requests", id), { comments, updatedAt: serverTimestamp() });
+  input.value = "";
+  await addNotification(`تعليق جديد على الطلب (${req.title}) بواسطة ${currentUser.name}`);
+}
+
+async function uploadDoneImages(id) {
+  if (!currentUser || !["worker", "admin"].includes(currentUser.role)) return alert("رفع صور الإنجاز للعامل أو المسؤول فقط");
+  const input = document.querySelector(`[data-done-input="${id}"]`);
+  const req = allRequests.find(r => r.id === id);
+  const imgs = await filesToCompressedBase64(input);
+  await updateDoc(doc(db, "requests", id), { doneImages: [...(req.doneImages || []), ...imgs], updatedAt: serverTimestamp() });
+  input.value = "";
+  await addNotification(`تم رفع صور إنجاز للطلب (${req.title})`);
 }
 
 function formatDate(ts) {
@@ -201,147 +216,93 @@ function formatDate(ts) {
 }
 
 function renderRequests() {
-  const selected = filterStatus.value;
-  const data = selected === "all" ? allRequests : allRequests.filter(r => r.status === selected);
-  if (!data.length) {
-    requestsList.innerHTML = `<p class="empty">لا توجد طلبات حالياً</p>`;
+  const filter = statusFilter.value;
+  const list = allRequests.filter(r => filter === "all" || r.status === filter);
+  if (!list.length) {
+    requestsList.innerHTML = `<div class="empty">لا توجد طلبات حالياً</div>`;
     return;
   }
-  requestsList.innerHTML = data.map(r => requestCardHtml(r)).join("");
-  bindRequestButtons();
-}
-
-filterStatus.addEventListener("change", renderRequests);
-
-function requestCardHtml(r) {
-  const canChange = currentUser.role === "worker" || currentUser.role === "admin";
-  const canDelete = currentUser.role === "admin";
-  const canRemind = currentUser.role === "member" || currentUser.role === "admin";
-  return `
-    <article class="requestCard priority-${r.priority || 'normal'}">
-      <div class="requestTop">
-        <div>
-          <h3>${escapeHtml(r.title || "بدون عنوان")}</h3>
-          <p class="meta">طالب الصيانة: <b>${escapeHtml(r.requesterName || "غير معروف")}</b> — ${formatDate(r.createdAt)}</p>
-          <p class="meta">الموقع: ${escapeHtml(r.location || "غير محدد")}</p>
+  requestsList.innerHTML = list.map(r => {
+    const canManage = currentUser && ["worker", "admin"].includes(currentUser.role);
+    const isAdmin = currentUser?.role === "admin";
+    const comments = (r.comments || []).map(c => `<div class="comment"><b>${escapeHtml(c.by)}:</b> ${escapeHtml(c.text)}</div>`).join("");
+    const images = (r.images || []).map(src => `<img class="thumb" src="${src}" data-img="${src}" alt="صورة المشكلة">`).join("");
+    const doneImages = (r.doneImages || []).map(src => `<img class="thumb done" src="${src}" data-img="${src}" alt="صورة الإنجاز">`).join("");
+    return `
+      <article class="request priority-${r.priority || 'normal'}">
+        <div class="request-head">
+          <div>
+            <h3>${escapeHtml(r.title || "طلب صيانة")}</h3>
+            <p class="muted">بواسطة: ${escapeHtml(r.requestedBy || "-")} — ${formatDate(r.createdAt)}</p>
+          </div>
+          <div class="badges">
+            <span class="badge status-${r.status || 'new'}">${statusNames[r.status || 'new']}</span>
+            <span class="badge priority-badge priority-${r.priority || 'normal'}">${priorityNames[r.priority || 'normal']}</span>
+          </div>
         </div>
-        <div class="badges">
-          <span class="badge status-${r.status || 'new'}">${statusLabels[r.status] || r.status}</span>
-          <span class="badge pr-${r.priority || 'normal'}">${priorityLabels[r.priority] || 'عادي'}</span>
+        <p class="desc">${escapeHtml(r.description || "")}</p>
+        ${images ? `<div><strong>صور المشكلة:</strong><div class="image-row">${images}</div></div>` : ""}
+        ${doneImages ? `<div><strong>صور الإنجاز:</strong><div class="image-row">${doneImages}</div></div>` : ""}
+        <div class="actions">
+          ${canManage ? `<button data-status="progress" data-id="${r.id}" data-title="${escapeAttr(r.title)}">قيد التنفيذ</button><button data-status="done" data-id="${r.id}" data-title="${escapeAttr(r.title)}">تم التنفيذ</button><button class="secondary" data-status="cancelled" data-id="${r.id}" data-title="${escapeAttr(r.title)}">إلغاء</button>` : ""}
+          <button class="secondary" data-reminder="${r.id}" data-title="${escapeAttr(r.title)}">تذكير</button>
+          ${isAdmin ? `<button class="danger" data-delete="${r.id}" data-title="${escapeAttr(r.title)}">حذف</button>` : ""}
         </div>
-      </div>
-      <p class="desc">${escapeHtml(r.description || "")}</p>
-      ${imagesHtml(r.beforeImages, "صور المشكلة")}
-      ${imagesHtml(r.afterImages, "صور بعد التنفيذ")}
-      <div class="actions">
-        ${canChange ? `<button data-action="progress" data-id="${r.id}" ${r.status==='in_progress'?'disabled':''}>قيد التنفيذ</button>` : ""}
-        ${canChange ? `<label class="uploadAfter">رفع صور الإنجاز<input type="file" accept="image/*" multiple data-action="after" data-id="${r.id}"></label>` : ""}
-        ${canChange ? `<button data-action="done" data-id="${r.id}" ${r.status==='done'?'disabled':''}>تم التنفيذ</button>` : ""}
-        ${canRemind ? `<button class="secondary" data-action="remind" data-id="${r.id}">تذكير بالتأخير (${r.reminders || 0})</button>` : ""}
-        ${canDelete ? `<button class="danger" data-action="delete" data-id="${r.id}">حذف</button>` : ""}
-      </div>
-    </article>
-  `;
+        ${canManage ? `<div class="done-upload"><input type="file" accept="image/*" multiple data-done-input="${r.id}"><button class="secondary" data-done-upload="${r.id}">رفع صور الإنجاز</button></div>` : ""}
+        <div class="comments"><strong>التعليقات:</strong>${comments || `<p class="muted">لا توجد تعليقات</p>`}</div>
+        <div class="comment-box"><input data-comment-input="${r.id}" placeholder="اكتب تعليق..."><button class="secondary" data-comment="${r.id}">إضافة تعليق</button></div>
+      </article>
+    `;
+  }).join("");
 }
-
-function imagesHtml(images = [], title) {
-  if (!images || !images.length) return "";
-  return `<div class="imagesBlock"><strong>${title}</strong><div class="thumbs">${images.map(src => `<img src="${src}" class="thumb" alt="صورة" data-img="${src}">`).join("")}</div></div>`;
-}
-
-function bindRequestButtons() {
-  document.querySelectorAll("[data-action]").forEach(el => {
-    const action = el.dataset.action;
-    const id = el.dataset.id;
-    if (action === "progress") el.onclick = () => updateStatus(id, "in_progress");
-    if (action === "done") el.onclick = () => updateStatus(id, "done");
-    if (action === "remind") el.onclick = () => remindRequest(id);
-    if (action === "delete") el.onclick = () => deleteRequest(id);
-    if (action === "after") el.onchange = (e) => uploadAfterImages(id, e.target);
-  });
-  document.querySelectorAll(".thumb").forEach(img => {
-    img.onclick = () => openImage(img.dataset.img);
-  });
-}
-
-async function updateStatus(id, status) {
-  const r = allRequests.find(x => x.id === id);
-  await updateDoc(doc(db, "maintenanceRequests", id), {
-    status,
-    updatedAt: serverTimestamp()
-  });
-  await createNotification(`${currentUser.name} غيّر حالة الطلب "${r?.title || ''}" إلى ${statusLabels[status]}`, id);
-}
-
-async function uploadAfterImages(id, input) {
-  const r = allRequests.find(x => x.id === id);
-  const imgs = await readImages(input);
-  const existing = r?.afterImages || [];
-  await updateDoc(doc(db, "maintenanceRequests", id), {
-    afterImages: [...existing, ...imgs].slice(0, 6),
-    updatedAt: serverTimestamp()
-  });
-  await createNotification(`${currentUser.name} أضاف صور إنجاز للطلب "${r?.title || ''}"`, id);
-}
-
-async function remindRequest(id) {
-  const r = allRequests.find(x => x.id === id);
-  await updateDoc(doc(db, "maintenanceRequests", id), {
-    reminders: (r?.reminders || 0) + 1,
-    lastReminderBy: currentUser.name,
-    updatedAt: serverTimestamp()
-  });
-  await createNotification(`تذكير من ${currentUser.name}: الطلب "${r?.title || ''}" متأخر`, id);
-}
-
-async function deleteRequest(id) {
-  if (!confirm("متأكد تريد حذف الطلب؟")) return;
-  const r = allRequests.find(x => x.id === id);
-  await deleteDoc(doc(db, "maintenanceRequests", id));
-  await createNotification(`${currentUser.name} حذف الطلب "${r?.title || ''}"`, id);
-}
-
-async function createNotification(message, requestId = "") {
-  await addDoc(collection(db, "maintenanceNotifications"), {
-    message,
-    requestId,
-    by: currentUser?.name || "النظام",
-    createdAt: serverTimestamp()
-  });
-}
-
-function renderNotifications() {
-  const items = allNotifications.slice(0, 20);
-  if (!items.length) {
-    notificationsList.innerHTML = `<p class="empty">لا توجد إشعارات بعد</p>`;
-    return;
-  }
-  notificationsList.innerHTML = items.map(n => `
-    <div class="notification">
-      <b>${escapeHtml(n.message || "")}</b>
-      <small>${formatDate(n.createdAt)}</small>
-    </div>
-  `).join("");
-}
-
-function showBrowserNotification(message) {
-  if ("Notification" in window && Notification.permission === "granted") {
-    new Notification("نظام الصيانة", { body: message });
-  }
-}
-
-function openImage(src) {
-  $("modalImg").src = src;
-  $("imageModal").classList.remove("hidden");
-}
-$("closeModal").onclick = () => $("imageModal").classList.add("hidden");
-$("imageModal").onclick = (e) => { if (e.target.id === "imageModal") $("imageModal").classList.add("hidden"); };
 
 function escapeHtml(str) {
-  return String(str).replace(/[&<>'"]/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-  }[c]));
+  return String(str || "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch]));
 }
+function escapeAttr(str) { return escapeHtml(str).replace(/`/g, "&#96;"); }
 
-if (currentUser) showApp();
-else syncStatus.textContent = "سجل الدخول للمتابعة";
+requestsList.addEventListener("click", async (e) => {
+  const t = e.target;
+  if (t.dataset.img) openImage(t.dataset.img);
+  if (t.dataset.status) await changeStatus(t.dataset.id, t.dataset.status, t.dataset.title);
+  if (t.dataset.delete) await deleteRequest(t.dataset.delete, t.dataset.title);
+  if (t.dataset.reminder) await sendReminder(t.dataset.reminder, t.dataset.title);
+  if (t.dataset.comment) await addComment(t.dataset.comment);
+  if (t.dataset.doneUpload) await uploadDoneImages(t.dataset.doneUpload);
+});
+
+statusFilter.addEventListener("change", renderRequests);
+
+function openImage(src) {
+  $("modalImage").src = src;
+  $("imageModal").classList.remove("hidden");
+}
+$("closeModal").addEventListener("click", () => $("imageModal").classList.add("hidden"));
+$("imageModal").addEventListener("click", (e) => { if (e.target.id === "imageModal") $("imageModal").classList.add("hidden"); });
+
+onSnapshot(query(requestsRef, orderBy("createdAt", "desc")), (snapshot) => {
+  allRequests = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderRequests();
+}, (err) => {
+  console.error(err);
+  requestsList.innerHTML = `<div class="empty error">خطأ في قراءة الطلبات. تأكد من قواعد Firestore.</div>`;
+});
+
+onSnapshot(query(notificationsRef, orderBy("at", "desc")), (snapshot) => {
+  const notes = snapshot.docs.map(d => ({ id: d.id, ...d.data() })).slice(0, 20);
+  notificationsList.innerHTML = notes.length ? notes.map(n => `<div class="note">${escapeHtml(n.text)}<span>${formatDate(n.at)}</span></div>`).join("") : `<p class="muted">لا توجد إشعارات</p>`;
+  if (lastNotificationCount && notes.length > lastNotificationCount) showBrowserNotification(notes[0]?.text || "تحديث جديد");
+  lastNotificationCount = notes.length;
+});
+
+$("notifyBtn").addEventListener("click", async () => {
+  if (!("Notification" in window)) return alert("المتصفح لا يدعم الإشعارات");
+  const permission = await Notification.requestPermission();
+  alert(permission === "granted" ? "تم تفعيل الإشعارات داخل المتصفح" : "لم يتم تفعيل الإشعارات");
+});
+
+function showBrowserNotification(text) {
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification("نظام الصيانة", { body: text });
+  }
+}
