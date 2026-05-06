@@ -1,6 +1,1 @@
-{
-  "name": "Maintenance App",
-  "short_name": "Maintenance",
-  "start_url": "./index.html",
-  "display": "standalone"
-}
+{"name": "Maintenance", "short_name": "Maintenance", "start_url": "./index.html", "display": "standalone"}
