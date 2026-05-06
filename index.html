@@ -3,15 +3,33 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Maintenance App</title>
+<title>نظام الصيانة</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <h1>نظام الصيانة</h1>
-<p>تم تعديل النسخة:</p>
-<ul>
-<li>إزالة حالة ملغي من العامل</li>
-<li>إضافة رفع صور الإنجاز</li>
-</ul>
+
+<div class="login">
+<input id="username" placeholder="اسم المستخدم">
+<input id="password" type="password" placeholder="كلمة المرور">
+<button onclick="login()">دخول</button>
+</div>
+
+<div id="app" style="display:none;">
+<h2>إرسال طلب</h2>
+<input id="requestText" placeholder="اكتب المشكلة">
+<select id="priority">
+<option>عادي</option>
+<option>مهم</option>
+<option>مستعجل</option>
+</select>
+<input type="file" id="beforeImage">
+<button onclick="sendRequest()">إرسال الطلب</button>
+
+<h2>الطلبات</h2>
+<div id="requests"></div>
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>

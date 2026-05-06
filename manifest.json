@@ -1,6 +1,6 @@
 {
 "name":"Maintenance App",
 "short_name":"Maintenance",
-"start_url":"./index.html",
+"start_url":"index.html",
 "display":"standalone"
 }
