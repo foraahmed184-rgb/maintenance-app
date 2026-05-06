@@ -470,3 +470,21 @@ async function createNotification(text) {
     console.log("notification:", text);
   } catch(e){}
 }
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  const roleSelect = document.getElementById("loginRole");
+  const wrapper = document.getElementById("passwordFieldWrapper");
+
+  function togglePasswordField() {
+    const role = roleSelect.value;
+    if (role === "admin" || role === "worker") {
+      wrapper.style.display = "block";
+    } else {
+      wrapper.style.display = "none";
+    }
+  }
+
+  roleSelect.addEventListener("change", togglePasswordField);
+  togglePasswordField();
+});
