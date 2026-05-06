@@ -180,7 +180,7 @@ async function submitRequest() {
     $("priorityInput").value = "عادي";
     $("imagesInput").value = "";
 
-    alert("تم إرسال الطلب ✅");
+    sendBrowserNotification("تم إرسال طلب صيانة جديد");\n    alert("تم إرسال الطلب ✅");
   } catch (error) {
     console.error(error);
     alert("ما قدرنا نرسل الطلب. جرّب صورة واحدة أو صورة أصغر.");
@@ -488,3 +488,20 @@ document.addEventListener("DOMContentLoaded", () => {
   roleSelect.addEventListener("change", togglePasswordField);
   togglePasswordField();
 });
+
+
+document.addEventListener("DOMContentLoaded", async () => {
+  if ("Notification" in window) {
+    try {
+      await Notification.requestPermission();
+    } catch(e){}
+  }
+});
+
+function sendBrowserNotification(text){
+  try{
+    if("Notification" in window && Notification.permission === "granted"){
+      new Notification("نظام الصيانة", { body: text });
+    }
+  }catch(e){}
+}
