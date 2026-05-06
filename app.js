@@ -39,14 +39,17 @@ $("submitRequestBtn").addEventListener("click", submitRequest);
 $("refreshBtn").addEventListener("click", () => location.reload());
 $("closeModalBtn").addEventListener("click", closeImageModal);
 
-function getRole(name, code) {
+
+function getRole(name, role, password) {
   const clean = String(name || "").trim();
 
-  if (clean === "Ahmed" && code === "2006") return "admin";
-  if (clean === "هارون" && code === "1111") return "worker";
+  if (role === "admin" && clean === "Ahmed" && password === "2006") return "admin";
+
+  if (role === "worker" && clean === "هارون" && password === "1111") return "worker";
 
   return "member";
 }
+
 
 function getRoleLabel(role) {
   if (role === "admin") return "👑 مسؤول";
@@ -459,4 +462,11 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+
+async function createNotification(text) {
+  try {
+    console.log("notification:", text);
+  } catch(e){}
 }

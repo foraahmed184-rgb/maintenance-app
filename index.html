@@ -22,7 +22,18 @@
       <p class="muted">ادخل اسم المستخدم والرمز</p>
       <input id="loginName" type="text" placeholder="اسم المستخدم" />
       <input id="loginCode" type="password" placeholder="الرمز" />
-      <button id="loginBtn">دخول</button>
+      
+<label>نوع الحساب</label>
+<select id="loginRole">
+<option value="member">عضو فريق 👥</option>
+<option value="worker">عامل 🛠️</option>
+<option value="admin">مسؤول 👑</option>
+</select>
+
+<label>الرمز (للعامل أو المسؤول)</label>
+<input id="loginPassword" type="password" placeholder="الرمز">
+
+<button id="loginBtn">دخول</button>
       <p class="hint">Ahmed 👑 = مسؤول / هارون 🛠️ = عامل / أي اسم آخر = عضو فريق</p>
     </section>
 
