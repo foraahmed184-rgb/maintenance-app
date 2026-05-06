@@ -302,7 +302,7 @@ function renderRequestCard(request) {
 
   const videoHtml = request.video ? `<div class="videos"><strong>فيديو المشكلة</strong><video src="${request.video}" controls></video></div>` : "";
 
-  const voiceAudioHtml = request.voiceAudio ? `<div class="audio-list"><strong>${urduText("تسجيل صوتي")}</strong><audio src="${request.voiceAudio}" controls></audio></div>` : "";
+  const voiceAudioHtml = request.voiceAudio ? `<div class="audio-list"><strong>${urduText("تسجيل صوتي")}</strong><audio src="${request.voiceAudio}" controls preload="metadata"></audio></div>` : "";
 
   const doneImagesHtml = (request.doneImages || [])
     .map((src) => `<img src="${src}" data-image="${src}" alt="صورة الإنجاز">`)
@@ -565,15 +565,24 @@ async function setupAudioRecorder() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunks = [];
-      mediaRecorder = new MediaRecorder(stream);
+      
+      let mimeType = "audio/webm";
+      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/mp4")) {
+        mimeType = "audio/mp4";
+      } else if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm")) {
+        mimeType = "audio/webm";
+      }
+
+      mediaRecorder = new MediaRecorder(stream, { mimeType });
+
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) audioChunks.push(event.data);
       };
 
       mediaRecorder.onstop = async () => {
-        const blob = new Blob(audioChunks, { type: "audio/webm" });
-        if (blob.size > 700000) {
+        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+        if (blob.size > 2000000) {
           alert("التسجيل طويل. خليه قصير أقل من دقيقة تقريبًا.");
           audioBase64 = "";
           preview.classList.add("hidden");
