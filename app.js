@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc,
-  serverTimestamp, query, orderBy, arrayUnion
+  serverTimestamp, query, orderBy, arrayUnion, getDocs, where
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -159,6 +159,62 @@ async function fileToBase64(file, maxBytes = 2500000) {
     r.onerror = reject;
     r.readAsDataURL(file);
   });
+}
+
+
+async function fileToBase64Raw(file) {
+  if (!file) return "";
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onloadend = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function saveVideoChunks(requestId, kind, file) {
+  const base64 = await fileToBase64Raw(file);
+  const chunkSize = 750000;
+  const total = Math.ceil(base64.length / chunkSize);
+
+  for (let i = 0; i < total; i++) {
+    await addDoc(collection(db, "mediaChunks"), {
+      requestId,
+      kind,
+      index: i,
+      total,
+      data: base64.slice(i * chunkSize, (i + 1) * chunkSize),
+      createdAt: serverTimestamp()
+    });
+  }
+
+  return `CHUNKED:${kind}:${total}`;
+}
+
+async function loadVideoChunks(requestId, kind, targetId) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+
+  target.innerHTML = "<p class='muted'>جاري تحميل الفيديو...</p>";
+
+  const q = query(
+    collection(db, "mediaChunks"),
+    where("requestId", "==", requestId),
+    where("kind", "==", kind)
+  );
+
+  const snap = await getDocs(q);
+  const chunks = [];
+  snap.forEach(d => chunks.push(d.data()));
+  chunks.sort((a, b) => a.index - b.index);
+
+  if (!chunks.length) {
+    target.innerHTML = "<p class='muted'>تعذر تحميل الفيديو.</p>";
+    return;
+  }
+
+  const videoBase64 = chunks.map(c => c.data).join("");
+  target.innerHTML = `<video src="${videoBase64}" controls></video>`;
 }
 
 async function compressImage(file, maxWidth = 520, quality = 0.45) {
@@ -400,6 +456,7 @@ async function handleAction(e) {
     if (action === "startWorkerAudio") await startWorkerAudio(id, e.currentTarget);
     if (action === "stopWorkerAudio") stopWorkerAudio(id, e.currentTarget);
     if (action === "saveWorkerMedia") await saveWorkerMedia(id);
+    if (action === "loadWorkerVideo") await loadVideoChunks(id, "workerVideo", `workerVideoBox-${id}`);
   } catch (err) {
     console.error(err);
     alert("حدث خطأ، جرّب ملف أصغر أو أعد المحاولة.");
@@ -448,7 +505,17 @@ function stopWorkerAudio(id, stopBtn) {
 async function saveWorkerMedia(id) {
   const ref = doc(db, "requests", id);
   const audio = workerAudio[id] || "";
-  const video = await fileToBase64($(`workerVideo-${id}`).files[0], 2500000);
+  const file = $(`workerVideo-${id}`).files[0];
+
+  let video = "";
+  if (file) {
+    if (file.size <= 700000) {
+      video = await fileToBase64Raw(file);
+    } else {
+      video = await saveVideoChunks(id, "workerVideo", file);
+    }
+  }
+
   if (!audio && !video) return alert("سجل صوت أو اختر فيديو أولاً");
 
   const data = { comments: arrayUnion(comment("أضاف العامل شرح صوتي/فيديو")) };
