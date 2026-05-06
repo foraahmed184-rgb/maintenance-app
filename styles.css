@@ -373,3 +373,11 @@ background:#fffbeb;
 border-right-color:#ef4444;
 background:#fef2f2;
 }
+
+
+.hidden-password {
+  display: none;
+}
+.hidden-password.show {
+  display: block;
+}

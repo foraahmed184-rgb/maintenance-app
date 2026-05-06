@@ -40,12 +40,20 @@ $("refreshBtn").addEventListener("click", () => location.reload());
 $("closeModalBtn").addEventListener("click", closeImageModal);
 
 
-function getRole(name, role, password) {
+function getRole(name, selectedRole, password) {
   const clean = String(name || "").trim();
 
-  if (role === "admin" && clean === "Ahmed" && password === "2006") return "admin";
+  if (selectedRole === "admin") {
+    if (clean === "Ahmed" && password === "2006") return "admin";
+    alert("بيانات المسؤول غير صحيحة");
+    return null;
+  }
 
-  if (role === "worker" && clean === "هارون" && password === "1111") return "worker";
+  if (selectedRole === "worker") {
+    if (clean === "هارون" && password === "1111") return "worker";
+    alert("بيانات العامل غير صحيحة");
+    return null;
+  }
 
   return "member";
 }
@@ -66,7 +74,10 @@ function login() {
   }
 
   currentUser = name;
-  currentRole = getRole(name, code);
+  const selectedRole = document.getElementById("loginRole")?.value || "member";
+  const password = document.getElementById("loginPassword")?.value || "";
+  currentRole = getRole(name, selectedRole, password);
+  if (!currentRole) return;
 
   localStorage.setItem("maintenance_current_user", currentUser);
 
@@ -472,58 +483,27 @@ async function createNotification(text) {
 }
 
 
-document.addEventListener("DOMContentLoaded", () => {
+
+
+function setupPasswordVisibility() {
   const roleSelect = document.getElementById("loginRole");
   const wrapper = document.getElementById("passwordFieldWrapper");
+  const passwordInput = document.getElementById("loginPassword");
 
-  function togglePasswordField() {
-    const role = roleSelect.value;
-    if (role === "admin" || role === "worker") {
-      wrapper.style.display = "block";
-    } else {
-      wrapper.style.display = "none";
-    }
+  if (!roleSelect || !wrapper) return;
+
+  function update() {
+    const needsPassword = roleSelect.value === "admin" || roleSelect.value === "worker";
+    wrapper.classList.toggle("show", needsPassword);
+    if (!needsPassword && passwordInput) passwordInput.value = "";
   }
 
-  roleSelect.addEventListener("change", togglePasswordField);
-  togglePasswordField();
-});
-
-
-document.addEventListener("DOMContentLoaded", async () => {
-  if ("Notification" in window) {
-    try {
-      await Notification.requestPermission();
-    } catch(e){}
-  }
-});
-
-function sendBrowserNotification(text){
-  try{
-    if("Notification" in window && Notification.permission === "granted"){
-      new Notification("نظام الصيانة", { body: text });
-    }
-  }catch(e){}
+  roleSelect.addEventListener("change", update);
+  update();
 }
 
-
-document.addEventListener("DOMContentLoaded", () => {
-  const roleSelect = document.getElementById("loginRole");
-  const wrapper = document.getElementById("passwordFieldWrapper");
-
-  function updatePasswordVisibility() {
-    const role = roleSelect ? roleSelect.value : "member";
-
-    if (role === "admin" || role === "worker") {
-      wrapper.style.display = "block";
-    } else {
-      wrapper.style.display = "none";
-    }
-  }
-
-  if(roleSelect){
-    roleSelect.addEventListener("change", updatePasswordVisibility);
-  }
-
-  updatePasswordVisibility();
-});
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", setupPasswordVisibility);
+} else {
+  setupPasswordVisibility();
+}

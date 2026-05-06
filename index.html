@@ -19,22 +19,25 @@
   <main>
     <section id="loginView" class="card login-card">
       <h2>الدخول</h2>
-      <p class="muted">ادخل اسم المستخدم والرمز</p>
+      <p class="muted">ادخل اسم المستخدم واختر نوع الحساب</p>
+
+      <label>اسم المستخدم</label>
       <input id="loginName" type="text" placeholder="اسم المستخدم" />
-      <input id="loginCode" type="password" placeholder="الرمز" />
-      
-<label>نوع الحساب</label>
-<select id="loginRole">
-<option value="member">عضو فريق 👥</option>
-<option value="worker">عامل 🛠️</option>
-<option value="admin">مسؤول 👑</option>
-</select>
 
-<div id="passwordFieldWrapper" style="display:none;">
-<div id="passwordFieldWrapper" style="display:none;"><input id="loginPassword" type="password" placeholder="الرمز"></div></div>
+      <label>نوع الحساب</label>
+      <select id="loginRole">
+        <option value="member">عضو فريق 👥</option>
+        <option value="worker">عامل 🛠️</option>
+        <option value="admin">مسؤول 👑</option>
+      </select>
 
-<button id="loginBtn">دخول</button>
-      <p class="hint">Ahmed 👑 = مسؤول / هارون 🛠️ = عامل / أي اسم آخر = عضو فريق</p>
+      <div id="passwordFieldWrapper" class="hidden-password">
+        <label>الرمز</label>
+        <input id="loginPassword" type="password" placeholder="الرمز" />
+      </div>
+
+      <button id="loginBtn">دخول</button>
+      <p class="hint">عضو الفريق لا يحتاج رمز. المسؤول: Ahmed / 2006، العامل: هارون / 1111</p>
     </section>
 
     <section id="appView" class="hidden">
