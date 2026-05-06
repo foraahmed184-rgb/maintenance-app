@@ -21,6 +21,8 @@ const notificationsRef = collection(db, "notifications");
 let currentUser = "";
 let currentRole = "member";
 let requestAudio = "";
+  requestAudios = [];
+let requestAudios = [];
 let recorder = null;
 let chunks = [];
 let workerAudio = {};
@@ -41,6 +43,8 @@ document.addEventListener("DOMContentLoaded", () => {
   $("closeModalBtn").addEventListener("click", closeImage);
   const locationFilter = $("locationFilter");
   if (locationFilter) locationFilter.addEventListener("change", () => renderRequests(allRequestsCache));
+  const statusFilter = $("statusFilter");
+  if (statusFilter) statusFilter.addEventListener("change", () => renderRequests(allRequestsCache));
   togglePassword();
 });
 
@@ -112,6 +116,15 @@ function makeRecorder(stream) {
 
 async function startRequestAudio() {
   try {
+    if (action === "loadChunkVideo") {
+      await loadMediaChunks(id, kind, target, "video");
+      return;
+    }
+    if (action === "loadChunkAudio") {
+      await loadMediaChunks(id, kind, target, "audio");
+      return;
+    }
+
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     chunks = [];
     recorder = makeRecorder(stream);
@@ -124,8 +137,10 @@ async function startRequestAudio() {
         return;
       }
       requestAudio = await blobToBase64(blob);
+      requestAudios.push(requestAudio);
       $("audioPreview").src = requestAudio;
       $("audioPreview").classList.remove("hidden");
+      renderRequestAudioPreviews();
       stream.getTracks().forEach(t => t.stop());
     };
     recorder.start();
@@ -140,6 +155,19 @@ function stopRequestAudio() {
   if (recorder && recorder.state !== "inactive") recorder.stop();
   $("stopRecordBtn").classList.add("hidden");
   $("recordBtn").classList.remove("hidden");
+}
+
+
+function renderRequestAudioPreviews() {
+  let box = document.getElementById("requestAudioList");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "requestAudioList";
+    box.className = "audio-list";
+    const preview = $("audioPreview");
+    if (preview && preview.parentNode) preview.parentNode.appendChild(box);
+  }
+  box.innerHTML = requestAudios.map((src, i) => `<audio src="${src}" controls preload="metadata"></audio>`).join("");
 }
 
 function blobToBase64(blob) {
@@ -181,9 +209,9 @@ async function saveMediaChunks(requestId, kind, file) {
   return { kind, name: file.name || kind, total };
 }
 
-async function saveMultipleChunkedFiles(requestId, files, baseKind, maxCount = 5) {
+async function saveMultipleChunkedFiles(requestId, files, baseKind, maxCount = 50) {
   const out = [];
-  const list = Array.from(files || []).slice(0, maxCount);
+  const list = Array.from(files || []);
   for (let i = 0; i < list.length; i++) {
     const file = list[i];
     const kind = `${baseKind}_${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`;
@@ -256,7 +284,7 @@ async function compressImage(file, maxWidth = 520, quality = 0.45) {
 }
 
 async function imageFilesToBase64(input) {
-  const files = Array.from(input.files || []).slice(0, 3);
+  const files = Array.from(input.files || []);
   const arr = [];
   for (const file of files) {
     if (file.type.startsWith("image/")) arr.push(await compressImage(file));
@@ -300,10 +328,13 @@ async function sendRequest() {
     const videos = await saveMultipleChunkedFiles(docRef.id, $("videoInput").files, "requestVideo", 5);
 
     let audios = [];
-    if (requestAudio) {
-      const blob = await (await fetch(requestAudio)).blob();
-      const fakeFile = new File([blob], "request-audio.webm", { type: blob.type || "audio/webm" });
-      audios = await saveMultipleChunkedFiles(docRef.id, [fakeFile], "requestAudio", 1);
+    if (requestAudios.length) {
+      const audioFiles = [];
+      for (let i = 0; i < requestAudios.length; i++) {
+        const blob = await (await fetch(requestAudios[i])).blob();
+        audioFiles.push(new File([blob], `request-audio-${i}.webm`, { type: blob.type || "audio/webm" }));
+      }
+      audios = await saveMultipleChunkedFiles(docRef.id, audioFiles, "requestAudio", 10);
     }
 
     await updateDoc(docRef, { videos, audios });
@@ -329,6 +360,8 @@ function resetForm() {
   requestAudio = "";
   $("audioPreview").src = "";
   $("audioPreview").classList.add("hidden");
+  const audioList = document.getElementById("requestAudioList");
+  if (audioList) audioList.innerHTML = "";
 }
 
 function listenRequests() {
@@ -385,8 +418,12 @@ function pt(text) {
 function renderRequests(requests) {
   let shown = requests;
 
-  if (currentRole === "worker" && $("locationFilter") && $("locationFilter").value) {
-    shown = requests.filter(r => (r.location || "") === $("locationFilter").value);
+  if ($("locationFilter") && $("locationFilter").value) {
+    shown = shown.filter(r => (r.location || "") === $("locationFilter").value);
+  }
+
+  if ($("statusFilter") && $("statusFilter").value) {
+    shown = shown.filter(r => (r.status || "") === $("statusFilter").value);
   }
 
   if (!shown.length) {
@@ -478,6 +515,8 @@ async function handleAction(e) {
   const action = e.currentTarget.dataset.action;
   const id = e.currentTarget.dataset.id;
   const ref = doc(db, "requests", id);
+  const kind = e.currentTarget.dataset.kind;
+  const target = e.currentTarget.dataset.target;
 
   try {
     if (action === "progress") {

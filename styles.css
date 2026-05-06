@@ -44,3 +44,5 @@ video{max-height:260px;background:#000}
 
 .filter-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:12px}
 .media-grid{display:flex;flex-direction:column;gap:8px;margin:8px 0}
+
+.audio-list audio{width:100%;margin-top:8px}
