@@ -1,7 +1,16 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, onSnapshot, doc, updateDoc,
-  deleteDoc, serverTimestamp, query, orderBy
+  getFirestore,
+  collection,
+  addDoc,
+  onSnapshot,
+  doc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  query,
+  orderBy,
+  arrayUnion
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -13,38 +22,35 @@ const firebaseConfig = {
   appId: "1:888866675500:web:d808b825c1801ed566ea89"
 };
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const requestsCol = collection(db, "requests");
-const notificationsCol = collection(db, "notifications");
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
 
-let currentUser = null;
+const requestsRef = collection(db, "requests");
+const notificationsRef = collection(db, "notifications");
+
+let currentUser = "";
 let currentRole = "member";
-let unsubscribeRequests = null;
-let unsubscribeNotifications = null;
 
 const $ = (id) => document.getElementById(id);
-
-function getRoleByName(name) {
-  const clean = (name || "").trim();
-  if (clean === "Ahmed") return "admin";
-  if (clean === "هارون") return "worker";
-  return "member";
-}
-
-function roleName(role) {
-  if (role === "admin") return "مسؤول";
-  if (role === "worker") return "عامل";
-  return "عضو فريق";
-}
 
 $("loginBtn").addEventListener("click", login);
 $("logoutBtn").addEventListener("click", logout);
 $("submitRequestBtn").addEventListener("click", submitRequest);
 $("refreshBtn").addEventListener("click", () => location.reload());
-$("clearNotificationsBtn").addEventListener("click", () => $("notificationsList").innerHTML = "");
-$("enableNotificationsBtn").addEventListener("click", enableBrowserNotifications);
-$("closeModalBtn").addEventListener("click", () => $("imageModal").classList.add("hidden"));
+$("closeModalBtn").addEventListener("click", closeImageModal);
+
+function getRole(name) {
+  const clean = String(name || "").trim();
+  if (clean === "Ahmed") return "admin";
+  if (clean === "هارون") return "worker";
+  return "member";
+}
+
+function getRoleLabel(role) {
+  if (role === "admin") return "مسؤول";
+  if (role === "worker") return "عامل";
+  return "عضو فريق";
+}
 
 function login() {
   const name = $("loginName").value.trim();
@@ -54,65 +60,77 @@ function login() {
   }
 
   currentUser = name;
-  currentRole = getRoleByName(name);
+  currentRole = getRole(name);
 
-  localStorage.setItem("maintenance_user", currentUser);
+  localStorage.setItem("maintenance_current_user", currentUser);
 
   $("loginView").classList.add("hidden");
   $("appView").classList.remove("hidden");
   $("logoutBtn").classList.remove("hidden");
   $("currentUserName").textContent = currentUser;
-  $("currentRoleBadge").textContent = roleName(currentRole);
+  $("currentRoleBadge").textContent = getRoleLabel(currentRole);
 
   listenRequests();
   listenNotifications();
 }
 
 function logout() {
-  localStorage.removeItem("maintenance_user");
+  localStorage.removeItem("maintenance_current_user");
   location.reload();
 }
 
-const savedUser = localStorage.getItem("maintenance_user");
+const savedUser = localStorage.getItem("maintenance_current_user");
 if (savedUser) {
   $("loginName").value = savedUser;
   login();
 }
 
-async function compressImage(file, maxWidth = 650, quality = 0.52) {
+async function compressImage(file, maxWidth = 520, quality = 0.45) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = reject;
+
     reader.onload = () => {
       const img = new Image();
-      img.onerror = reject;
+
       img.onload = () => {
         let width = img.width;
         let height = img.height;
+
         if (width > maxWidth) {
-          height = Math.round(height * maxWidth / width);
+          height = Math.round((height * maxWidth) / width);
           width = maxWidth;
         }
+
         const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
-        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
         resolve(canvas.toDataURL("image/jpeg", quality));
       };
+
+      img.onerror = reject;
       img.src = reader.result;
     };
+
+    reader.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
 
-async function filesToCompressedBase64(fileList) {
-  const files = Array.from(fileList || []).slice(0, 4);
-  const result = [];
+async function getCompressedImages(inputElement) {
+  const files = Array.from(inputElement.files || []).slice(0, 3);
+  const images = [];
+
   for (const file of files) {
     if (!file.type.startsWith("image/")) continue;
-    result.push(await compressImage(file));
+    const compressed = await compressImage(file);
+    images.push(compressed);
   }
-  return result;
+
+  return images;
 }
 
 async function submitRequest() {
@@ -129,9 +147,9 @@ async function submitRequest() {
   $("submitRequestBtn").textContent = "جاري الإرسال...";
 
   try {
-    const images = await filesToCompressedBase64($("imagesInput").files);
+    const images = await getCompressedImages($("imagesInput"));
 
-    await addDoc(requestsCol, {
+    await addDoc(requestsRef, {
       title,
       description,
       priority,
@@ -141,7 +159,11 @@ async function submitRequest() {
       images,
       doneImages: [],
       comments: [
-        { by: currentUser, text: "تم إنشاء الطلب", at: new Date().toISOString() }
+        {
+          by: currentUser,
+          text: "تم إنشاء الطلب",
+          at: new Date().toISOString()
+        }
       ]
     });
 
@@ -149,12 +171,13 @@ async function submitRequest() {
 
     $("titleInput").value = "";
     $("descriptionInput").value = "";
-    $("imagesInput").value = "";
     $("priorityInput").value = "عادي";
+    $("imagesInput").value = "";
+
     alert("تم إرسال الطلب ✅");
-  } catch (err) {
-    console.error(err);
-    alert("تعذر إرسال الطلب. جرّب صورة أصغر أو صورة واحدة فقط.");
+  } catch (error) {
+    console.error(error);
+    alert("ما قدرنا نرسل الطلب. جرّب صورة واحدة أو صورة أصغر.");
   }
 
   $("submitRequestBtn").disabled = false;
@@ -162,245 +185,272 @@ async function submitRequest() {
 }
 
 function listenRequests() {
-  if (unsubscribeRequests) unsubscribeRequests();
+  const q = query(requestsRef, orderBy("createdAt", "desc"));
 
-  const q = query(requestsCol, orderBy("createdAt", "desc"));
-  unsubscribeRequests = onSnapshot(q, (snapshot) => {
+  onSnapshot(q, (snapshot) => {
     const requests = [];
-    snapshot.forEach(d => requests.push({ id: d.id, ...d.data() }));
+    snapshot.forEach((item) => {
+      requests.push({ id: item.id, ...item.data() });
+    });
     renderRequests(requests);
-  }, (err) => {
-    console.error(err);
-    $("requestsList").innerHTML = `<p class="muted">حدث خطأ في تحميل الطلبات.</p>`;
+  }, (error) => {
+    console.error(error);
+    $("requestsList").innerHTML = `<p class="muted">تعذر تحميل الطلبات.</p>`;
   });
 }
 
 function listenNotifications() {
-  if (unsubscribeNotifications) unsubscribeNotifications();
+  const q = query(notificationsRef, orderBy("createdAt", "desc"));
 
-  const q = query(notificationsCol, orderBy("createdAt", "desc"));
-  unsubscribeNotifications = onSnapshot(q, (snapshot) => {
-    const list = [];
-    snapshot.forEach(d => list.push({ id: d.id, ...d.data() }));
-    renderNotifications(list.slice(0, 20));
-
-    const latest = list[0];
-    if (latest && latest.text) {
-      showBrowserNotification(latest.text);
-    }
+  onSnapshot(q, (snapshot) => {
+    const notifications = [];
+    snapshot.forEach((item) => {
+      notifications.push({ id: item.id, ...item.data() });
+    });
+    renderNotifications(notifications.slice(0, 20));
   });
 }
 
 function renderRequests(requests) {
-  const box = $("requestsList");
   if (!requests.length) {
-    box.innerHTML = `<p class="muted">لا توجد طلبات حالياً.</p>`;
+    $("requestsList").innerHTML = `<p class="muted">لا توجد طلبات حالياً.</p>`;
     return;
   }
 
-  box.innerHTML = requests.map(r => requestHtml(r)).join("");
+  $("requestsList").innerHTML = requests.map((request) => renderRequestCard(request)).join("");
 
-  document.querySelectorAll("[data-action]").forEach(btn => {
+  document.querySelectorAll("[data-action]").forEach((btn) => {
     btn.addEventListener("click", handleAction);
   });
-  document.querySelectorAll("[data-img]").forEach(img => {
-    img.addEventListener("click", () => openImage(img.getAttribute("data-img")));
+
+  document.querySelectorAll("[data-image]").forEach((img) => {
+    img.addEventListener("click", () => openImageModal(img.getAttribute("data-image")));
   });
 }
 
-function requestHtml(r) {
-  const priorityClass = r.priority === "مستعجل" ? "priority-urgent" : r.priority === "مهم" ? "priority-important" : "priority-normal";
-  const statusClass = r.status === "تم التنفيذ" ? "status-done" : r.status === "قيد التنفيذ" ? "status-progress" : "status-new";
-  const cardClass = `priority-${r.priority || "عادي"}`;
-  const images = (r.images || []).map(src => `<img src="${src}" data-img="${src}" alt="صورة المشكلة">`).join("");
-  const doneImages = (r.doneImages || []).map(src => `<img src="${src}" data-img="${src}" alt="صورة الإنجاز">`).join("");
-  const comments = (r.comments || []).map(c => `<div class="comment"><b>${escapeHtml(c.by || "")}:</b> ${escapeHtml(c.text || "")}</div>`).join("");
+function renderRequestCard(request) {
+  const priorityCardClass =
+    request.priority === "مستعجل"
+      ? "priority-urgent"
+      : request.priority === "مهم"
+      ? "priority-important"
+      : "";
+
+  const priorityBadgeClass =
+    request.priority === "مستعجل"
+      ? "badge-urgent"
+      : request.priority === "مهم"
+      ? "badge-important"
+      : "badge-normal";
+
+  const statusBadgeClass =
+    request.status === "تم التنفيذ"
+      ? "badge-done"
+      : request.status === "قيد التنفيذ"
+      ? "badge-progress"
+      : "badge-new";
+
+  const imagesHtml = (request.images || [])
+    .map((src) => `<img src="${src}" data-image="${src}" alt="صورة المشكلة">`)
+    .join("");
+
+  const doneImagesHtml = (request.doneImages || [])
+    .map((src) => `<img src="${src}" data-image="${src}" alt="صورة الإنجاز">`)
+    .join("");
+
+  const commentsHtml = (request.comments || [])
+    .map((comment) => `
+      <div class="comment">
+        <strong>${escapeHtml(comment.by || "")}</strong>: ${escapeHtml(comment.text || "")}
+      </div>
+    `)
+    .join("");
 
   const canChangeStatus = currentRole === "worker" || currentRole === "admin";
   const canDelete = currentRole === "admin";
+  const canRemind = currentRole === "member";
 
-  let actions = "";
-  if (canChangeStatus && r.status !== "قيد التنفيذ") {
-    actions += `<button data-action="progress" data-id="${r.id}" class="warn">قيد التنفيذ</button>`;
+  let actionsHtml = "";
+
+  if (canChangeStatus && request.status !== "قيد التنفيذ") {
+    actionsHtml += `<button class="warning" data-action="progress" data-id="${request.id}">قيد التنفيذ</button>`;
   }
-  if (canChangeStatus && r.status !== "تم التنفيذ") {
-    actions += `<button data-action="done" data-id="${r.id}" class="success">تم التنفيذ</button>`;
+
+  if (canChangeStatus && request.status !== "تم التنفيذ") {
+    actionsHtml += `<button class="success" data-action="done" data-id="${request.id}">تم التنفيذ</button>`;
   }
+
   if (canDelete) {
-    actions += `<button data-action="delete" data-id="${r.id}" class="danger">حذف الطلب</button>`;
-    if (r.status !== "ملغي") actions += `<button data-action="cancel" data-id="${r.id}" class="ghost">ملغي</button>`;
-  }
-  if (currentRole === "member") {
-    actions += `<button data-action="remind" data-id="${r.id}" class="ghost">تذكير بالتأخير</button>`;
+    actionsHtml += `<button class="danger" data-action="delete" data-id="${request.id}">حذف الطلب</button>`;
   }
 
-  const doneUpload = canChangeStatus ? `
-    <div class="done-upload">
-      <label>صور الإنجاز</label>
-      <input type="file" accept="image/*" multiple id="done-${r.id}">
-      <button data-action="uploadDone" data-id="${r.id}">رفع صور الإنجاز</button>
-    </div>` : "";
+  if (canRemind) {
+    actionsHtml += `<button class="ghost" data-action="remind" data-id="${request.id}">تذكير بالتأخير</button>`;
+  }
+
+  const doneUploadHtml = canChangeStatus
+    ? `
+      <div class="done-box">
+        <label>صور الإنجاز</label>
+        <input id="doneImages-${request.id}" type="file" accept="image/*" multiple>
+        <button data-action="uploadDoneImages" data-id="${request.id}">رفع صور الإنجاز</button>
+      </div>
+    `
+    : "";
 
   return `
-    <div class="request ${cardClass}">
-      <div class="request-head">
+    <article class="request-card ${priorityCardClass}">
+      <div class="request-top">
         <div>
-          <div class="request-title">${escapeHtml(r.title || "طلب صيانة")}</div>
-          <div class="request-meta">بواسطة: ${escapeHtml(r.createdBy || "غير معروف")}</div>
+          <div class="request-title">${escapeHtml(request.title || "طلب صيانة")}</div>
+          <div class="meta">المرسل: ${escapeHtml(request.createdBy || "غير معروف")}</div>
         </div>
+
         <div class="badges">
-          <span class="badge ${priorityClass}">${escapeHtml(r.priority || "عادي")}</span>
-          <span class="badge ${statusClass}">${escapeHtml(r.status || "جديد")}</span>
+          <span class="badge ${priorityBadgeClass}">${escapeHtml(request.priority || "عادي")}</span>
+          <span class="badge ${statusBadgeClass}">${escapeHtml(request.status || "جديد")}</span>
         </div>
       </div>
 
-      <div class="request-desc">${escapeHtml(r.description || "")}</div>
+      <div class="description">${escapeHtml(request.description || "")}</div>
 
-      ${images ? `<b>صور المشكلة:</b><div class="images">${images}</div>` : ""}
-      ${doneImages ? `<b>صور الإنجاز:</b><div class="images">${doneImages}</div>` : ""}
+      ${imagesHtml ? `<strong>صور المشكلة</strong><div class="images">${imagesHtml}</div>` : ""}
+      ${doneImagesHtml ? `<strong>صور الإنجاز</strong><div class="images">${doneImagesHtml}</div>` : ""}
 
-      ${doneUpload}
+      ${doneUploadHtml}
 
-      <div class="actions">${actions}</div>
+      <div class="actions">${actionsHtml}</div>
 
-      <div class="comment-box">
-        <div class="comments">${comments}</div>
+      <div class="comments">
+        ${commentsHtml}
       </div>
-    </div>
+    </article>
   `;
 }
 
-async function handleAction(e) {
-  const action = e.currentTarget.getAttribute("data-action");
-  const id = e.currentTarget.getAttribute("data-id");
-  const ref = doc(db, "requests", id);
+async function handleAction(event) {
+  const action = event.currentTarget.getAttribute("data-action");
+  const id = event.currentTarget.getAttribute("data-id");
+  const requestDoc = doc(db, "requests", id);
 
   try {
     if (action === "progress") {
-      await updateDoc(ref, {
+      if (currentRole !== "worker" && currentRole !== "admin") return;
+
+      await updateDoc(requestDoc, {
         status: "قيد التنفيذ",
-        comments: arrayAppendLocal(await getCurrentComments(id), { by: currentUser, text: "تم تغيير الحالة إلى قيد التنفيذ", at: new Date().toISOString() })
+        comments: arrayUnion({
+          by: currentUser,
+          text: "تم تغيير الحالة إلى قيد التنفيذ",
+          at: new Date().toISOString()
+        })
       });
+
       await addNotification(`${currentUser} غيّر حالة طلب إلى قيد التنفيذ`);
     }
 
     if (action === "done") {
-      await updateDoc(ref, {
-        status: "تم التنفيذ",
-        comments: arrayAppendLocal(await getCurrentComments(id), { by: currentUser, text: "تم تغيير الحالة إلى تم التنفيذ", at: new Date().toISOString() })
-      });
-      await addNotification(`${currentUser} أنهى طلب صيانة`);
-    }
+      if (currentRole !== "worker" && currentRole !== "admin") return;
 
-    if (action === "cancel") {
-      if (currentRole !== "admin") return;
-      await updateDoc(ref, { status: "ملغي" });
-      await addNotification(`${currentUser} ألغى طلب صيانة`);
+      await updateDoc(requestDoc, {
+        status: "تم التنفيذ",
+        comments: arrayUnion({
+          by: currentUser,
+          text: "تم تغيير الحالة إلى تم التنفيذ",
+          at: new Date().toISOString()
+        })
+      });
+
+      await addNotification(`${currentUser} أنهى طلب صيانة`);
     }
 
     if (action === "delete") {
       if (currentRole !== "admin") return;
-      if (confirm("هل تريد حذف الطلب؟")) {
-        await deleteDoc(ref);
+
+      if (confirm("هل أنت متأكد من حذف الطلب؟")) {
+        await deleteDoc(requestDoc);
         await addNotification(`${currentUser} حذف طلب صيانة`);
       }
     }
 
     if (action === "remind") {
-      await addNotification(`${currentUser} أرسل تذكير: الطلب متأخر`);
+      await updateDoc(requestDoc, {
+        comments: arrayUnion({
+          by: currentUser,
+          text: "تذكير: الطلب متأخر",
+          at: new Date().toISOString()
+        })
+      });
+
+      await addNotification(`${currentUser} أرسل تذكير بتأخير طلب صيانة`);
       alert("تم إرسال التذكير داخل التطبيق ✅");
     }
 
-    if (action === "uploadDone") {
-      const input = document.getElementById(`done-${id}`);
-      const doneImages = await filesToCompressedBase64(input.files);
+    if (action === "uploadDoneImages") {
+      if (currentRole !== "worker" && currentRole !== "admin") return;
+
+      const input = $(`doneImages-${id}`);
+      const doneImages = await getCompressedImages(input);
+
       if (!doneImages.length) {
-        alert("اختر صورة أولاً");
+        alert("اختر صورة إنجاز أولاً");
         return;
       }
-      await updateDoc(ref, {
+
+      await updateDoc(requestDoc, {
         doneImages,
-        status: "تم التنفيذ"
+        status: "تم التنفيذ",
+        comments: arrayUnion({
+          by: currentUser,
+          text: "تم رفع صور الإنجاز",
+          at: new Date().toISOString()
+        })
       });
+
       await addNotification(`${currentUser} رفع صور الإنجاز`);
       alert("تم رفع صور الإنجاز ✅");
     }
-  } catch (err) {
-    console.error(err);
-    alert("حدث خطأ أثناء تنفيذ العملية.");
+  } catch (error) {
+    console.error(error);
+    alert("حدث خطأ. جرّب مرة ثانية.");
   }
-}
-
-/* حتى لا نحتاج دوال Firestore المعقدة للمصفوفات ونبقي الكود ثابت */
-let lastRequestsCache = [];
-function renderRequests(requests) {
-  lastRequestsCache = requests;
-  const box = $("requestsList");
-  if (!requests.length) {
-    box.innerHTML = `<p class="muted">لا توجد طلبات حالياً.</p>`;
-    return;
-  }
-  box.innerHTML = requests.map(r => requestHtml(r)).join("");
-  document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", handleAction));
-  document.querySelectorAll("[data-img]").forEach(img => img.addEventListener("click", () => openImage(img.getAttribute("data-img"))));
-}
-
-async function getCurrentComments(id) {
-  const found = lastRequestsCache.find(r => r.id === id);
-  return found?.comments || [];
-}
-
-function arrayAppendLocal(arr, item) {
-  return [...(arr || []), item];
 }
 
 async function addNotification(text) {
   try {
-    await addDoc(notificationsCol, {
+    await addDoc(notificationsRef, {
       text,
       by: currentUser || "النظام",
       createdAt: serverTimestamp()
     });
-  } catch (err) {
-    console.error("notification error", err);
+  } catch (error) {
+    console.error(error);
   }
 }
 
-function renderNotifications(list) {
-  const box = $("notificationsList");
-  if (!list.length) {
-    box.innerHTML = `<p class="muted">لا توجد إشعارات.</p>`;
+function renderNotifications(notifications) {
+  if (!notifications.length) {
+    $("notificationsList").innerHTML = `<p class="muted">لا توجد إشعارات.</p>`;
     return;
   }
-  box.innerHTML = list.map(n => `<div class="notification">${escapeHtml(n.text || "")}</div>`).join("");
+
+  $("notificationsList").innerHTML = notifications
+    .map((item) => `<div class="notification">${escapeHtml(item.text || "")}</div>`)
+    .join("");
 }
 
-function enableBrowserNotifications() {
-  if (!("Notification" in window)) {
-    alert("المتصفح لا يدعم الإشعارات");
-    return;
-  }
-  Notification.requestPermission().then(p => {
-    alert(p === "granted" ? "تم تفعيل الإشعارات" : "لم يتم السماح بالإشعارات");
-  });
-}
-
-let lastNotificationText = "";
-function showBrowserNotification(text) {
-  if (!text || text === lastNotificationText) return;
-  lastNotificationText = text;
-  if ("Notification" in window && Notification.permission === "granted") {
-    new Notification("نظام الصيانة", { body: text });
-  }
-}
-
-function openImage(src) {
+function openImageModal(src) {
   $("modalImage").src = src;
   $("imageModal").classList.remove("hidden");
 }
 
-function escapeHtml(str) {
-  return String(str)
+function closeImageModal() {
+  $("imageModal").src = "";
+  $("imageModal").classList.add("hidden");
+}
+
+function escapeHtml(value) {
+  return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")

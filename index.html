@@ -11,61 +11,54 @@
   <header class="topbar">
     <div>
       <h1>نظام طلبات الصيانة</h1>
-      <p>إدارة طلبات الصيانة داخل الشركة</p>
+      <p>تنظيم طلبات الصيانة بين الفريق والعامل</p>
     </div>
-    <button id="logoutBtn" class="ghost hidden">خروج</button>
+    <button id="logoutBtn" class="ghost hidden">تغيير المستخدم</button>
   </header>
 
   <main>
     <section id="loginView" class="card login-card">
-      <h2>دخول المستخدم</h2>
-      <p class="muted">اكتب اسمك فقط. النظام يحدد الصلاحية تلقائيًا.</p>
-      <label>اسمك</label>
-      <input id="loginName" type="text" placeholder="مثلاً: أحمد" />
+      <h2>الدخول</h2>
+      <p class="muted">اكتب اسمك فقط</p>
+      <input id="loginName" type="text" placeholder="اكتب اسمك" />
       <button id="loginBtn">دخول</button>
-      <div class="hint">
-        Ahmed = مسؤول، هارون = عامل، أي اسم آخر = عضو فريق
-      </div>
+      <p class="hint">Ahmed = مسؤول، هارون = عامل، أي اسم آخر = عضو فريق</p>
     </section>
 
     <section id="appView" class="hidden">
-      <div class="user-strip card">
+      <section class="card user-card">
         <div>
+          <div class="muted small">المستخدم الحالي</div>
           <strong id="currentUserName"></strong>
           <span id="currentRoleBadge" class="role-badge"></span>
         </div>
-        <button id="enableNotificationsBtn" class="ghost">تفعيل إشعارات المتصفح</button>
-      </div>
+      </section>
 
-      <section class="card" id="newRequestCard">
+      <section id="newRequestCard" class="card">
         <h2>طلب صيانة جديد</h2>
-        <div class="grid">
-          <div>
-            <label>عنوان المشكلة</label>
-            <input id="titleInput" type="text" placeholder="مثلاً: مكيف لا يعمل" />
-          </div>
-          <div>
-            <label>الأولوية</label>
-            <select id="priorityInput">
-              <option value="عادي">عادي</option>
-              <option value="مهم">مهم</option>
-              <option value="مستعجل">مستعجل</option>
-            </select>
-          </div>
-        </div>
 
-        <label>وصف المشكلة</label>
-        <textarea id="descriptionInput" rows="4" placeholder="اكتب تفاصيل المشكلة والمكان"></textarea>
+        <label>عنوان المشكلة</label>
+        <input id="titleInput" type="text" placeholder="مثلاً: تسريب ماء / مكيف لا يعمل" />
+
+        <label>وصف المشكلة والمكان</label>
+        <textarea id="descriptionInput" rows="4" placeholder="اكتب تفاصيل المشكلة هنا"></textarea>
+
+        <label>الأولوية</label>
+        <select id="priorityInput">
+          <option value="عادي">عادي</option>
+          <option value="مهم">مهم</option>
+          <option value="مستعجل">مستعجل</option>
+        </select>
 
         <label>صور المشكلة</label>
         <input id="imagesInput" type="file" accept="image/*" multiple />
 
         <button id="submitRequestBtn">إرسال الطلب</button>
-        <p class="muted small">يتم ضغط الصور تلقائيًا لتجنب مشكلة الحجم.</p>
+        <p class="muted small">الصور يتم ضغطها تلقائياً. الأفضل رفع 1 إلى 3 صور.</p>
       </section>
 
       <section class="card">
-        <div class="section-title">
+        <div class="section-header">
           <h2>الطلبات</h2>
           <button id="refreshBtn" class="ghost">تحديث</button>
         </div>
@@ -73,10 +66,7 @@
       </section>
 
       <section class="card">
-        <div class="section-title">
-          <h2>الإشعارات داخل التطبيق</h2>
-          <button id="clearNotificationsBtn" class="ghost">مسح</button>
-        </div>
+        <h2>الإشعارات داخل التطبيق</h2>
         <div id="notificationsList" class="notifications-list"></div>
       </section>
     </section>
