@@ -196,6 +196,7 @@ async function submitRequest() {
     }
 
     if (action === "uploadWorkerMedia") {
+      event.preventDefault();
       await uploadWorkerMedia(id);
       return;
     }
@@ -674,7 +675,7 @@ function urduText(text) {
 }
 
 
-async function fileToBase64Limited(file, maxBytes = 1500000) {
+async function fileToBase64Limited(file, maxBytes = 5000000) {
   if (!file) return "";
   if (file.size > maxBytes) {
     alert("حجم الفيديو كبير. اختر فيديو قصير جدًا أو قلل الجودة.");
@@ -719,7 +720,7 @@ function workerMediaHtml(requestId) {
       <label>فيديو شرح العامل</label>
       <input id="workerVideo-${requestId}" type="file" accept="video/*">
 
-      <button data-action="uploadWorkerMedia" data-id="${requestId}">حفظ شرح العامل</button>
+      <button type="button" data-action="uploadWorkerMedia" data-id="${requestId}">حفظ شرح العامل</button>
     </div>
   `;
 }
@@ -764,7 +765,7 @@ async function startWorkerAudio(requestId, startBtn) {
       stream.getTracks().forEach(track => track.stop());
     };
 
-    workerAudioRecorders[requestId] = { recorder, audio: "" };
+    workerAudioRecorders[requestId] = { recorder: recorder, audio: "" };
     recorder.start();
 
     const stopBtn = document.querySelector(`[data-action="stopWorkerAudio"][data-id="${requestId}"]`);
@@ -791,7 +792,16 @@ async function uploadWorkerMedia(requestId) {
   const requestDoc = doc(db, "requests", requestId);
   const videoInput = document.getElementById(`workerVideo-${requestId}`);
   const workerVideoFile = videoInput?.files?.[0];
-  const workerVideo = await fileToBase64Limited(workerVideoFile);
+
+  let workerVideo = "";
+  try {
+    if (workerVideoFile) {
+      workerVideo = await fileToBase64Limited(workerVideoFile, 5000000);
+    }
+  } catch(e) {
+    console.log(e);
+  }
+
   const workerAudio = workerAudioRecorders[requestId]?.audio || "";
 
   if (!workerAudio && !workerVideo) {
