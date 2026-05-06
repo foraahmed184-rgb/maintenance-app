@@ -4,97 +4,88 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>نظام طلبات الصيانة</title>
-  <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json" />
 </head>
 <body>
   <header class="topbar">
     <div>
       <h1>نظام طلبات الصيانة</h1>
-      <p>طلبات الصيانة الداخلية للفريق</p>
+      <p>طلبات الفريق تظهر للجميع مباشرة</p>
     </div>
-    <button id="logoutBtn" class="ghost hidden">تسجيل خروج</button>
+    <button id="logoutBtn" class="ghost hidden">خروج</button>
   </header>
 
-  <main class="container">
-    <section id="loginCard" class="card login-card">
-      <h2>دخول المستخدم</h2>
-      <p class="muted">اكتب اسمك واختر دورك داخل النظام.</p>
+  <main>
+    <section id="loginView" class="card login-card">
+      <h2>تسجيل الدخول</h2>
       <label>اسمك</label>
-      <input id="userName" type="text" placeholder="مثلاً: أحمد" />
+      <input id="loginName" placeholder="مثلاً: أحمد" autocomplete="name" />
       <label>دورك</label>
-      <select id="userRole">
+      <select id="loginRole">
         <option value="member">عضو من الفريق</option>
-        <option value="worker">عامل الصيانة</option>
-        <option value="admin">مسؤول</option>
+        <option value="worker">العامل</option>
+        <option value="admin">المسؤول</option>
       </select>
       <div id="passwordWrap" class="hidden">
         <label>كلمة المرور</label>
-        <input id="password" type="password" placeholder="كلمة المرور" />
+        <input id="loginPass" type="password" placeholder="كلمة المرور" />
       </div>
-      <button id="loginBtn">دخول</button>
-      <p class="hint">المسؤول: admin / 1234 — العامل: 0000</p>
+      <button id="loginBtn" class="primary">دخول</button>
+      
     </section>
 
-    <section id="appArea" class="hidden">
+    <section id="appView" class="hidden">
       <div class="user-line card">
-        <div>
-          <strong id="currentUserLabel"></strong>
-          <p class="muted" id="roleLabel"></p>
-        </div>
-        <button id="notifyBtn" class="secondary">تفعيل إشعارات داخلية</button>
+        <div><strong id="currentUser"></strong><span id="currentRole"></span></div>
+        <span id="syncState">جاري الاتصال...</span>
       </div>
 
-      <section class="card" id="requestFormCard">
-        <h2>إرسال طلب صيانة</h2>
+      <section id="requestFormCard" class="card">
+        <h2>طلب صيانة جديد</h2>
         <div class="grid">
-          <div>
-            <label>عنوان المشكلة</label>
-            <input id="title" type="text" placeholder="مثلاً: مكيف لا يعمل" />
-          </div>
-          <div>
-            <label>الأولوية</label>
-            <select id="priority">
-              <option value="normal">عادي</option>
-              <option value="important">مهم</option>
-              <option value="urgent">مستعجل</option>
-            </select>
-          </div>
+          <label>عنوان المشكلة
+            <input id="title" placeholder="مثلاً: مكيف لا يعمل" />
+          </label>
+          <label>الموقع / القسم
+            <input id="location" placeholder="مثلاً: الدور الثاني - مكتب 3" />
+          </label>
         </div>
-        <label>وصف المشكلة</label>
-        <textarea id="description" rows="4" placeholder="اكتب تفاصيل المشكلة والمكان..."></textarea>
-        <label>صور المشكلة (اختياري)</label>
-        <input id="images" type="file" accept="image/*" multiple />
-        <p class="hint">الصور يتم ضغطها تلقائيًا قبل الإرسال عشان ما يظهر خطأ الحجم.</p>
-        <button id="sendBtn">إرسال الطلب</button>
+        <label>الأهمية
+          <select id="priority">
+            <option value="normal">عادي</option>
+            <option value="important">مهم</option>
+            <option value="urgent">مستعجل</option>
+          </select>
+        </label>
+        <label>وصف المشكلة
+          <textarea id="description" placeholder="اكتب تفاصيل المشكلة..."></textarea>
+        </label>
+        <label>صور المشكلة (اختياري)
+          <input id="images" type="file" accept="image/*" multiple />
+        </label>
+        <button id="submitRequest" class="primary">إرسال الطلب</button>
       </section>
 
       <section class="card">
         <div class="section-head">
           <h2>الطلبات</h2>
-          <div class="filters">
-            <select id="statusFilter">
-              <option value="all">كل الحالات</option>
-              <option value="new">جديد</option>
-              <option value="progress">قيد التنفيذ</option>
-              <option value="done">تم التنفيذ</option>
-              <option value="cancelled">ملغي</option>
-            </select>
-          </div>
+          <select id="filterStatus">
+            <option value="all">كل الحالات</option>
+            <option value="new">جديد</option>
+            <option value="progress">قيد التنفيذ</option>
+            <option value="done">تم التنفيذ</option>
+            <option value="cancelled">ملغي</option>
+          </select>
         </div>
-        <div id="requestsList" class="requests"></div>
-      </section>
-
-      <section class="card">
-        <h2>الإشعارات داخل التطبيق</h2>
-        <div id="notificationsList" class="notifications"></div>
+        <div id="requestsList" class="requests-list"></div>
       </section>
     </section>
   </main>
 
   <div id="imageModal" class="modal hidden">
-    <button id="closeModal" class="close">×</button>
-    <img id="modalImage" alt="صورة مكبرة" />
+    <button id="closeModal" class="modal-close">×</button>
+    <img id="modalImg" alt="صورة مكبرة" />
   </div>
 
   <script type="module" src="app.js"></script>
