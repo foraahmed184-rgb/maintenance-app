@@ -69,11 +69,27 @@
           <option value="مستعجل">مستعجل</option>
         </select>
 
+        <label for="locationInput">الموقع</label>
+        <select id="locationInput">
+          <option value="">اختر الموقع</option>
+          <option value="السبعين">السبعين</option>
+          <option value="العزيزية الكبيرة">العزيزية الكبيرة</option>
+          <option value="العزيزية الصغيرة">العزيزية الصغيرة</option>
+          <option value="السكن">السكن</option>
+          <option value="التضامن">التضامن</option>
+          <option value="العروبة">العروبة</option>
+          <option value="المكرونة">المكرونة</option>
+          <option value="الاربعين">الاربعين</option>
+          <option value="عمارة 5">عمارة 5</option>
+          <option value="الاستقدام">الاستقدام</option>
+          <option value="ابحر">ابحر</option>
+        </select>
+
         <label for="imagesInput">صور المشكلة</label>
         <input id="imagesInput" type="file" accept="image/*" multiple />
 
         <label for="videoInput">فيديو المشكلة</label>
-        <input id="videoInput" type="file" accept="video/*" />
+        <input id="videoInput" type="file" accept="video/*" multiple />
         <p class="hint">الفيديو لازم يكون قصير جدًا، الأفضل أقل من 10 ثواني.</p>
 
         <label>تسجيل صوتي</label>
@@ -90,6 +106,23 @@
         <div class="row">
           <h2 id="requestsTitle">الطلبات</h2>
           <button id="refreshBtn" class="secondary">تحديث</button>
+        </div>
+        <div id="workerFilterBox" class="filter-box hidden">
+          <label for="locationFilter">فلتر الموقع</label>
+          <select id="locationFilter">
+            <option value="">كل المواقع</option>
+          <option value="السبعين">السبعين</option>
+          <option value="العزيزية الكبيرة">العزيزية الكبيرة</option>
+          <option value="العزيزية الصغيرة">العزيزية الصغيرة</option>
+          <option value="السكن">السكن</option>
+          <option value="التضامن">التضامن</option>
+          <option value="العروبة">العروبة</option>
+          <option value="المكرونة">المكرونة</option>
+          <option value="الاربعين">الاربعين</option>
+          <option value="عمارة 5">عمارة 5</option>
+          <option value="الاستقدام">الاستقدام</option>
+          <option value="ابحر">ابحر</option>
+          </select>
         </div>
         <div id="requestsList"></div>
       </section>

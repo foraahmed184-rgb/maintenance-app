@@ -25,6 +25,7 @@ let recorder = null;
 let chunks = [];
 let workerAudio = {};
 let latestNotificationId = "";
+let allRequestsCache = [];
 
 const $ = (id) => document.getElementById(id);
 
@@ -38,6 +39,8 @@ document.addEventListener("DOMContentLoaded", () => {
   $("recordBtn").addEventListener("click", startRequestAudio);
   $("stopRecordBtn").addEventListener("click", stopRequestAudio);
   $("closeModalBtn").addEventListener("click", closeImage);
+  const locationFilter = $("locationFilter");
+  if (locationFilter) locationFilter.addEventListener("change", () => renderRequests(allRequestsCache));
   togglePassword();
 });
 
@@ -54,7 +57,7 @@ function login() {
 
   if (!name) return alert("اكتب اسم المستخدم");
   if (role === "admin" && (name !== "Ahmed" || pass !== "2006")) return alert("بيانات المسؤول غير صحيحة");
-  if (role === "worker" && (name !== "هارون" || pass !== "1111")) return alert("بيانات العامل غير صحيحة");
+  if (role === "worker" && (name !== "Haroon" || pass !== "Ha")) return alert("بيانات العامل غير صحيحة");
 
   currentUser = name;
   currentRole = role;
@@ -67,6 +70,7 @@ function login() {
   if (role === "worker") {
     $("newRequestCard").classList.add("hidden");
     $("workerPashtoNotice").classList.remove("hidden");
+    if ($("workerFilterBox")) $("workerFilterBox").classList.remove("hidden");
     $("pageTitle").textContent = "مینٹیننس درخواستیں";
     $("pageSubtitle").textContent = "کاریگر کا صفحہ";
     $("requestsTitle").textContent = "درخواستیں";
@@ -147,6 +151,74 @@ function blobToBase64(blob) {
   });
 }
 
+
+async function fileToBase64Raw(file) {
+  if (!file) return "";
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onloadend = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function saveMediaChunks(requestId, kind, file) {
+  const base64 = await fileToBase64Raw(file);
+  const chunkSize = 700000;
+  const total = Math.ceil(base64.length / chunkSize);
+
+  for (let i = 0; i < total; i++) {
+    await addDoc(collection(db, "mediaChunks"), {
+      requestId,
+      kind,
+      index: i,
+      total,
+      data: base64.slice(i * chunkSize, (i + 1) * chunkSize),
+      createdAt: serverTimestamp()
+    });
+  }
+
+  return { kind, name: file.name || kind, total };
+}
+
+async function saveMultipleChunkedFiles(requestId, files, baseKind, maxCount = 5) {
+  const out = [];
+  const list = Array.from(files || []).slice(0, maxCount);
+  for (let i = 0; i < list.length; i++) {
+    const file = list[i];
+    const kind = `${baseKind}_${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`;
+    out.push(await saveMediaChunks(requestId, kind, file));
+  }
+  return out;
+}
+
+async function loadMediaChunks(requestId, kind, targetId, mediaType) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+
+  target.innerHTML = "<p class='muted'>جاري تحميل الملف...</p>";
+
+  const mediaQuery = query(
+    collection(db, "mediaChunks"),
+    where("requestId", "==", requestId),
+    where("kind", "==", kind)
+  );
+
+  const snap = await getDocs(mediaQuery);
+  const chunks = [];
+  snap.forEach(d => chunks.push(d.data()));
+  chunks.sort((a,b) => a.index - b.index);
+
+  if (!chunks.length) {
+    target.innerHTML = "<p class='muted'>تعذر تحميل الملف.</p>";
+    return;
+  }
+
+  const data = chunks.map(c => c.data).join("");
+  if (mediaType === "audio") target.innerHTML = `<audio src="${data}" controls preload="metadata"></audio>`;
+  else target.innerHTML = `<video src="${data}" controls></video>`;
+}
+
 async function fileToBase64(file, maxBytes = 2500000) {
   if (!file) return "";
   if (file.size > maxBytes) {
@@ -161,61 +233,6 @@ async function fileToBase64(file, maxBytes = 2500000) {
   });
 }
 
-
-async function fileToBase64Raw(file) {
-  if (!file) return "";
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onloadend = () => resolve(r.result);
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
-}
-
-async function saveVideoChunks(requestId, kind, file) {
-  const base64 = await fileToBase64Raw(file);
-  const chunkSize = 750000;
-  const total = Math.ceil(base64.length / chunkSize);
-
-  for (let i = 0; i < total; i++) {
-    await addDoc(collection(db, "mediaChunks"), {
-      requestId,
-      kind,
-      index: i,
-      total,
-      data: base64.slice(i * chunkSize, (i + 1) * chunkSize),
-      createdAt: serverTimestamp()
-    });
-  }
-
-  return `CHUNKED:${kind}:${total}`;
-}
-
-async function loadVideoChunks(requestId, kind, targetId) {
-  const target = document.getElementById(targetId);
-  if (!target) return;
-
-  target.innerHTML = "<p class='muted'>جاري تحميل الفيديو...</p>";
-
-  const q = query(
-    collection(db, "mediaChunks"),
-    where("requestId", "==", requestId),
-    where("kind", "==", kind)
-  );
-
-  const snap = await getDocs(q);
-  const chunks = [];
-  snap.forEach(d => chunks.push(d.data()));
-  chunks.sort((a, b) => a.index - b.index);
-
-  if (!chunks.length) {
-    target.innerHTML = "<p class='muted'>تعذر تحميل الفيديو.</p>";
-    return;
-  }
-
-  const videoBase64 = chunks.map(c => c.data).join("");
-  target.innerHTML = `<video src="${videoBase64}" controls></video>`;
-}
 
 async function compressImage(file, maxWidth = 520, quality = 0.45) {
   return new Promise((resolve, reject) => {
@@ -251,45 +268,64 @@ async function sendRequest() {
   const title = $("titleInput").value.trim();
   const description = $("descriptionInput").value.trim();
   const priority = $("priorityInput").value;
+  const location = $("locationInput") ? $("locationInput").value : "";
+
   if (!title || !description) return alert("اكتب العنوان والوصف");
+  if (!location) return alert("اختر الموقع");
 
   $("sendBtn").disabled = true;
   $("sendBtn").textContent = "جاري الإرسال...";
 
   try {
     const images = await imageFilesToBase64($("imagesInput"));
-    const video = await fileToBase64($("videoInput").files[0], 2500000);
 
-    await addDoc(requestsRef, {
-      title, description, priority,
+    const docRef = await addDoc(requestsRef, {
+      title, description, priority, location,
       status: "جديد",
       createdBy: currentUser,
       createdAt: serverTimestamp(),
-      images, video, audio: requestAudio,
+      images,
+      videos: [],
+      audios: [],
+      video: "",
+      audio: "",
       doneImages: [],
       workerAudio: "",
+      workerAudios: [],
       workerVideo: "",
+      workerVideos: [],
       comments: [{ by: currentUser, text: "تم إنشاء الطلب", at: new Date().toISOString() }]
     });
+
+    const videos = await saveMultipleChunkedFiles(docRef.id, $("videoInput").files, "requestVideo", 5);
+
+    let audios = [];
+    if (requestAudio) {
+      const blob = await (await fetch(requestAudio)).blob();
+      const fakeFile = new File([blob], "request-audio.webm", { type: blob.type || "audio/webm" });
+      audios = await saveMultipleChunkedFiles(docRef.id, [fakeFile], "requestAudio", 1);
+    }
+
+    await updateDoc(docRef, { videos, audios });
 
     await addNotification(`طلب جديد من ${currentUser}: ${title}`);
     resetForm();
     alert("تم إرسال الطلب ✅");
   } catch (e) {
     console.error(e);
-    alert("حدث خطأ أثناء الإرسال. جرّب بدون فيديو أو بصورة واحدة.");
+    alert("حدث خطأ أثناء الإرسال. جرّب عدد ملفات أقل أو فيديو أقصر.");
   }
 
   $("sendBtn").disabled = false;
   $("sendBtn").textContent = "إرسال الطلب";
 }
-
 function resetForm() {
   $("titleInput").value = "";
   $("descriptionInput").value = "";
   $("priorityInput").value = "عادي";
   $("imagesInput").value = "";
   $("videoInput").value = "";
+  if ($("locationInput")) $("locationInput").value = "";
   requestAudio = "";
   $("audioPreview").src = "";
   $("audioPreview").classList.add("hidden");
@@ -300,6 +336,7 @@ function listenRequests() {
   onSnapshot(q, snap => {
     const data = [];
     snap.forEach(d => data.push({ id: d.id, ...d.data() }));
+    allRequestsCache = data;
     renderRequests(data);
   }, err => {
     console.error(err);
@@ -346,17 +383,22 @@ function pt(text) {
 }
 
 function renderRequests(requests) {
-  if (!requests.length) {
+  let shown = requests;
+
+  if (currentRole === "worker" && $("locationFilter") && $("locationFilter").value) {
+    shown = requests.filter(r => (r.location || "") === $("locationFilter").value);
+  }
+
+  if (!shown.length) {
     $("requestsList").innerHTML = `<p class="muted">${pt("لا توجد طلبات حالياً.")}</p>`;
     return;
   }
 
-  $("requestsList").innerHTML = requests.map(r => requestHTML(r)).join("");
+  $("requestsList").innerHTML = shown.map(r => requestHTML(r)).join("");
 
   document.querySelectorAll("[data-action]").forEach(btn => btn.addEventListener("click", handleAction));
   document.querySelectorAll("[data-img]").forEach(img => img.addEventListener("click", () => openImage(img.dataset.img)));
 }
-
 function requestHTML(r) {
   const priorityClass = r.priority === "مستعجل" ? "priority-urgent" : r.priority === "مهم" ? "priority-important" : "";
   const priorityTag = r.priority === "مستعجل" ? "tag-urgent" : r.priority === "مهم" ? "tag-important" : "tag-normal";
@@ -364,6 +406,10 @@ function requestHTML(r) {
 
   const images = (r.images || []).map(src => `<img src="${src}" data-img="${src}">`).join("");
   const doneImages = (r.doneImages || []).map(src => `<img src="${src}" data-img="${src}">`).join("");
+  const requestVideosHtml = (r.videos || []).map((v, idx) => `<div id="requestVideoBox-${r.id}-${idx}"><button type="button" class="secondary" data-action="loadChunkVideo" data-id="${r.id}" data-kind="${v.kind}" data-target="requestVideoBox-${r.id}-${idx}">تشغيل فيديو الطلب ${idx+1}</button></div>`).join("");
+  const requestAudiosHtml = (r.audios || []).map((a, idx) => `<div id="requestAudioBox-${r.id}-${idx}"><button type="button" class="secondary" data-action="loadChunkAudio" data-id="${r.id}" data-kind="${a.kind}" data-target="requestAudioBox-${r.id}-${idx}">تشغيل صوت الطلب ${idx+1}</button></div>`).join("");
+  const workerVideosHtml = (r.workerVideos || []).map((v, idx) => `<div id="workerVideoBox-${r.id}-${idx}"><button type="button" class="secondary" data-action="loadChunkVideo" data-id="${r.id}" data-kind="${v.kind}" data-target="workerVideoBox-${r.id}-${idx}">تشغيل فيديو العامل ${idx+1}</button></div>`).join("");
+  const workerAudiosHtml = (r.workerAudios || []).map((a, idx) => `<div id="workerAudioBox-${r.id}-${idx}"><button type="button" class="secondary" data-action="loadChunkAudio" data-id="${r.id}" data-kind="${a.kind}" data-target="workerAudioBox-${r.id}-${idx}">تشغيل صوت العامل ${idx+1}</button></div>`).join("");
 
   const canWork = currentRole === "worker" || currentRole === "admin";
   const canDelete = currentRole === "admin";
@@ -374,7 +420,7 @@ function requestHTML(r) {
       <div class="request-head">
         <div>
           <div class="request-title">${escape(r.title || "طلب")}</div>
-          <div class="meta">${pt("المرسل")}: ${escape(r.createdBy || "")}</div>
+          <div class="meta">${pt("المرسل")}: ${escape(r.createdBy || "")}</div><div class="meta">الموقع: ${escape(r.location || "غير محدد")}</div>
         </div>
         <div class="tags">
           <span class="tag ${priorityTag}">${escape(pt(r.priority || "عادي"))}</span>
@@ -385,12 +431,16 @@ function requestHTML(r) {
       <div class="desc">${escape(r.description || "")}</div>
 
       ${images ? `<b>${pt("صور المشكلة")}</b><div class="images">${images}</div>` : ""}
+      ${requestVideosHtml ? `<b>فيديوهات الطلب</b><div class="media-grid">${requestVideosHtml}</div>` : ""}
+      ${requestAudiosHtml ? `<b>تسجيلات الطلب</b><div class="media-grid">${requestAudiosHtml}</div>` : ""}
       ${r.video ? `<b>${pt("فيديو المشكلة")}</b><video src="${r.video}" controls></video>` : ""}
       ${r.audio ? `<b>${pt("تسجيل صوتي")}</b><audio src="${r.audio}" controls preload="metadata"></audio>` : ""}
 
       ${doneImages ? `<b>${pt("صور الإنجاز")}</b><div class="images">${doneImages}</div>` : ""}
       ${r.workerAudio ? `<b>${pt("شرح العامل بالصوت")}</b><audio src="${r.workerAudio}" controls preload="metadata"></audio>` : ""}
       ${r.workerVideo ? `<b>${pt("فيديو شرح العامل")}</b><video src="${r.workerVideo}" controls></video>` : ""}
+      ${workerAudiosHtml ? `<b>تسجيلات العامل</b><div class="media-grid">${workerAudiosHtml}</div>` : ""}
+      ${workerVideosHtml ? `<b>فيديوهات العامل</b><div class="media-grid">${workerVideosHtml}</div>` : ""}
 
       ${canWork ? workerTools(r.id) : ""}
 
@@ -417,7 +467,7 @@ function workerTools(id) {
       <audio id="workerAudioPreview-${id}" controls class="hidden"></audio>
 
       <label>${pt("فيديو شرح العامل")}</label>
-      <input id="workerVideo-${id}" type="file" accept="video/*">
+      <input id="workerVideo-${id}" type="file" accept="video/*" multiple>
       <button type="button" data-action="saveWorkerMedia" data-id="${id}">${pt("حفظ صوت/فيديو العامل")}</button>
       <p class="hint">الفيديو يجب أن يكون قصيرًا جدًا.</p>
     </div>
@@ -505,27 +555,35 @@ function stopWorkerAudio(id, stopBtn) {
 async function saveWorkerMedia(id) {
   const ref = doc(db, "requests", id);
   const audio = workerAudio[id] || "";
-  const file = $(`workerVideo-${id}`).files[0];
+  const videoFiles = Array.from($(`workerVideo-${id}`).files || []);
 
-  let video = "";
-  if (file) {
-    if (file.size <= 700000) {
-      video = await fileToBase64Raw(file);
-    } else {
-      video = await saveVideoChunks(id, "workerVideo", file);
-    }
+  if (!audio && !videoFiles.length) return alert("سجل صوت أو اختر فيديو أولاً");
+
+  let newAudios = [];
+  if (audio) {
+    const blob = await (await fetch(audio)).blob();
+    const fakeFile = new File([blob], "worker-audio.webm", { type: blob.type || "audio/webm" });
+    newAudios = await saveMultipleChunkedFiles(id, [fakeFile], "workerAudio", 1);
   }
 
-  if (!audio && !video) return alert("سجل صوت أو اختر فيديو أولاً");
+  const newVideos = await saveMultipleChunkedFiles(id, videoFiles, "workerVideo", 5);
 
-  const data = { comments: arrayUnion(comment("أضاف العامل شرح صوتي/فيديو")) };
-  if (audio) data.workerAudio = audio;
-  if (video) data.workerVideo = video;
+  const data = {
+    comments: arrayUnion(comment("أضاف العامل شرح صوتي/فيديو")),
+  };
+
+  if (newAudios.length) data.workerAudios = arrayUnion(...newAudios);
+  if (newVideos.length) data.workerVideos = arrayUnion(...newVideos);
+
   await updateDoc(ref, data);
   await addNotification(`${currentUser} أضاف شرح صوتي/فيديو`);
+  workerAudio[id] = "";
+  const preview = $(`workerAudioPreview-${id}`);
+  if (preview) { preview.src = ""; preview.classList.add("hidden"); }
+  const input = $(`workerVideo-${id}`);
+  if (input) input.value = "";
   alert("تم حفظ شرح العامل");
 }
-
 async function addNotification(text) {
   await addDoc(notificationsRef, { text, by: currentUser || "النظام", createdAt: serverTimestamp() });
 }

@@ -41,3 +41,6 @@ video{max-height:260px;background:#000}
 #closeModalBtn{position:fixed;top:14px;left:14px;background:#fff;color:#111827;border-radius:50%;width:44px;height:44px;padding:0;font-size:30px;line-height:44px}
 #workerPashtoNotice{background:#eef7ff;border-color:#bfdbfe}
 @media(max-width:700px){main{padding:10px}.card{padding:13px;border-radius:14px}.topbar h1{font-size:18px}input,select,textarea,button{font-size:15px}}
+
+.filter-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:12px}
+.media-grid{display:flex;flex-direction:column;gap:8px;margin:8px 0}
