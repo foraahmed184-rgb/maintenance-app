@@ -1,6 +1,9 @@
 {
-"name":"Maintenance App",
-"short_name":"Maintenance",
-"start_url":"index.html",
-"display":"standalone"
+  "name": "نظام طلبات الصيانة",
+  "short_name": "الصيانة",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f3f6fb",
+  "theme_color": "#0f172a",
+  "icons": []
 }
