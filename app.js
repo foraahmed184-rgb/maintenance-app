@@ -723,6 +723,7 @@ function updateRoleBasedUI() {
 
 let workerAudioRecorders = {};
 
+
 function workerMediaHtml(requestId) {
   if (currentRole !== "worker" && currentRole !== "admin") return "";
 
@@ -730,18 +731,20 @@ function workerMediaHtml(requestId) {
     <div class="done-box worker-media-box">
       <label>شرح العامل بالصوت</label>
       <div class="voice-box">
-        <button type="button" class="ghost" data-action="startWorkerAudio" data-id="${requestId}">بدء تسجيل شرح العامل 🎙️</button>
-        <button type="button" class="ghost hidden" data-action="stopWorkerAudio" data-id="${requestId}">إيقاف التسجيل ⏹️</button>
-        <audio id="workerAudioPreview-${requestId}" controls class="hidden"></audio>
+        <button type="button" class="ghost" data-worker-action="startAudio" data-id="${requestId}">بدء تسجيل صوت العامل 🎙️</button>
+        <button type="button" class="ghost hidden" data-worker-action="stopAudio" data-id="${requestId}">إيقاف التسجيل ⏹️</button>
+        <audio id="workerAudioPreviewFixed-${requestId}" controls class="hidden"></audio>
       </div>
 
       <label>فيديو شرح العامل</label>
-      <input id="workerVideo-${requestId}" type="file" accept="video/*">
+      <input id="workerVideoFixed-${requestId}" type="file" accept="video/*">
 
-      <button type="button" data-action="uploadWorkerMedia" data-id="${requestId}">حفظ شرح العامل</button>
+      <button type="button" data-worker-action="saveMedia" data-id="${requestId}">حفظ صوت/فيديو العامل</button>
+      <p class="muted small">الفيديو يفضل يكون قصير. إذا كان كبير جدًا لن يتم حفظه.</p>
     </div>
   `;
 }
+
 
 async function startWorkerAudio(requestId, startBtn) {
   try {
@@ -975,4 +978,170 @@ async function workerSaveMedia(requestId) {
     console.error(error);
     alert("حدث خطأ أثناء حفظ صوت/فيديو العامل");
   }
+}
+
+
+// إصلاح نهائي لأزرار صوت/فيديو العامل: يعمل حتى بعد تحديث الطلبات
+document.addEventListener("click", async function (event) {
+  const btn = event.target.closest("[data-worker-action]");
+  if (!btn) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  const requestId = btn.getAttribute("data-id");
+  const action = btn.getAttribute("data-worker-action");
+
+  if (!requestId || !action) return;
+
+  if (action === "startAudio") {
+    await workerStartAudioFixed(requestId, btn);
+  }
+
+  if (action === "stopAudio") {
+    workerStopAudioFixed(requestId, btn);
+  }
+
+  if (action === "saveMedia") {
+    await workerSaveMediaFixed(requestId);
+  }
+});
+
+let workerAudioStoreFixed = {};
+
+async function workerStartAudioFixed(requestId, startButton) {
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert("المتصفح لا يدعم تسجيل الصوت");
+      return;
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const chunks = [];
+
+    let options = {};
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported) {
+      if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+        options.mimeType = "audio/webm;codecs=opus";
+      } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+        options.mimeType = "audio/webm";
+      } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+        options.mimeType = "audio/mp4";
+      }
+    }
+
+    const recorder = new MediaRecorder(stream, options);
+
+    recorder.ondataavailable = function (e) {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    };
+
+    recorder.onstop = async function () {
+      const blob = new Blob(chunks, { type: recorder.mimeType || options.mimeType || "audio/webm" });
+
+      if (blob.size > 2500000) {
+        alert("التسجيل طويل. سجل صوت أقصر.");
+        workerAudioStoreFixed[requestId] = "";
+        stream.getTracks().forEach(t => t.stop());
+        return;
+      }
+
+      workerAudioStoreFixed[requestId] = await workerBlobToBase64Fixed(blob);
+
+      const preview = document.getElementById("workerAudioPreviewFixed-" + requestId);
+      if (preview) {
+        preview.src = workerAudioStoreFixed[requestId];
+        preview.classList.remove("hidden");
+      }
+
+      stream.getTracks().forEach(t => t.stop());
+    };
+
+    workerAudioStoreFixed[requestId + "_recorder"] = recorder;
+    recorder.start();
+
+    const stopBtn = document.querySelector('[data-worker-action="stopAudio"][data-id="' + requestId + '"]');
+    startButton.classList.add("hidden");
+    if (stopBtn) stopBtn.classList.remove("hidden");
+
+  } catch (error) {
+    console.error(error);
+    alert("لم يتم السماح بالمايكروفون أو المتصفح لا يدعم التسجيل");
+  }
+}
+
+function workerStopAudioFixed(requestId, stopButton) {
+  const recorder = workerAudioStoreFixed[requestId + "_recorder"];
+
+  if (recorder && recorder.state !== "inactive") {
+    recorder.stop();
+  }
+
+  const startBtn = document.querySelector('[data-worker-action="startAudio"][data-id="' + requestId + '"]');
+  stopButton.classList.add("hidden");
+  if (startBtn) startBtn.classList.remove("hidden");
+}
+
+async function workerSaveMediaFixed(requestId) {
+  try {
+    const videoInput = document.getElementById("workerVideoFixed-" + requestId);
+    const videoFile = videoInput && videoInput.files ? videoInput.files[0] : null;
+
+    let workerVideo = "";
+    if (videoFile) {
+      workerVideo = await fileToBase64LimitedFixed(videoFile, 5000000);
+    }
+
+    const workerAudio = workerAudioStoreFixed[requestId] || "";
+
+    if (!workerAudio && !workerVideo) {
+      alert("سجل صوت أو اختر فيديو أولاً");
+      return;
+    }
+
+    const requestDoc = doc(db, "requests", requestId);
+    const updateData = {
+      comments: arrayUnion({
+        by: currentUser,
+        text: "أضاف العامل شرح صوتي/فيديو للإنجاز",
+        at: new Date().toISOString()
+      })
+    };
+
+    if (workerAudio) updateData.workerAudio = workerAudio;
+    if (workerVideo) updateData.workerVideo = workerVideo;
+
+    await updateDoc(requestDoc, updateData);
+    await addNotification(currentUser + " أضاف شرح صوتي/فيديو للإنجاز");
+
+    alert("تم حفظ صوت/فيديو العامل ✅");
+  } catch (error) {
+    console.error(error);
+    alert("حدث خطأ أثناء حفظ الصوت/الفيديو");
+  }
+}
+
+function workerBlobToBase64Fixed(blob) {
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onloadend = function () { resolve(reader.result); };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function fileToBase64LimitedFixed(file, maxBytes) {
+  if (!file) return "";
+
+  if (file.size > maxBytes) {
+    alert("حجم الفيديو كبير. اختر فيديو أقصر أو أقل جودة.");
+    return "";
+  }
+
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onloadend = function () { resolve(reader.result); };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
