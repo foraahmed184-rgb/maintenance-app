@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام طلبات الصيانة</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.json">
+</head>
+<body>
+<header class="topbar">
+<div>
+<h1 id="appTitle">نظام طلبات الصيانة</h1>
+<p id="appSubtitle">تنظيم طلبات الصيانة بين الفريق والعامل والمسؤول</p>
+</div>
+<button id="logoutBtn" class="secondary hidden">خروج</button>
+</header>
+
+<main>
+<section id="loginView" class="card login-card">
+<h2>تسجيل الدخول</h2>
+<label>اسم المستخدم</label>
+<input id="loginName" type="text" placeholder="اكتب اسمك">
+<label>نوع الحساب</label>
+<select id="loginRole">
+<option value="member">عضو فريق 👥</option>
+<option value="worker">عامل 🛠️</option>
+<option value="admin">مسؤول 👑</option>
+</select>
+<div id="passwordBox" class="hidden">
+<label>الرمز</label>
+<input id="loginPassword" type="password" placeholder="اكتب الرمز">
+</div>
+<button id="loginBtn">دخول</button>
+</section>
+
+<section id="appView" class="hidden">
+<section id="workerUrduNotice" class="card hidden urdu-box">
+<h2>مینٹیننس درخواستیں</h2>
+<p>یہ صفحہ کاریگر کے لیے اردو میں ہے۔ آپ درخواست کی حالت بدل سکتے ہیں اور کام کی تصاویر، آواز یا ویڈیو شامل کر سکتے ہیں۔</p>
+</section>
+
+<section class="card user-card">
+<div><span class="muted">المستخدم الحالي:</span> <strong id="currentUser"></strong> <span id="roleBadge" class="badge"></span></div>
+<button id="notifyBtn" class="secondary">تفعيل الإشعارات</button>
+</section>
+
+<section id="newRequestCard" class="card">
+<h2>طلب صيانة جديد</h2>
+<label>عنوان المشكلة</label>
+<input id="titleInput" type="text" placeholder="مثال: مكيف لا يعمل">
+<label>وصف المشكلة والمكان</label>
+<textarea id="descriptionInput" rows="4" placeholder="اكتب تفاصيل المشكلة"></textarea>
+<label>الأولوية</label>
+<select id="priorityInput">
+<option value="عادي">عادي</option>
+<option value="مهم">مهم</option>
+<option value="مستعجل">مستعجل</option>
+</select>
+<label>الموقع</label>
+<select id="locationInput">
+<option value="">اختر الموقع</option>
+<option value="السبعين">السبعين</option>
+<option value="العزيزية الكبيرة">العزيزية الكبيرة</option>
+<option value="العزيزية الصغيرة">العزيزية الصغيرة</option>
+<option value="السكن">السكن</option>
+<option value="التضامن">التضامن</option>
+<option value="العروبة">العروبة</option>
+<option value="المكرونة">المكرونة</option>
+<option value="الاربعين">الاربعين</option>
+<option value="عمارة 5">عمارة 5</option>
+<option value="الاستقدام">الاستقدام</option>
+<option value="ابحر">ابحر</option>
+</select>
+<label>صور المشكلة</label>
+<input id="imagesInput" type="file" accept="image/*" multiple>
+<label>فيديوهات المشكلة</label>
+<input id="videosInput" type="file" accept="video/*" multiple>
+<p class="hint">يفضل أن تكون الفيديوهات قصيرة حتى لا يتأخر التحميل.</p>
+<label>تسجيلات صوتية</label>
+<div class="voice-box">
+<button type="button" id="recordBtn" class="secondary">بدء تسجيل صوت 🎙️</button>
+<button type="button" id="stopRecordBtn" class="secondary hidden">إيقاف التسجيل ⏹️</button>
+<div id="requestAudioPreviews" class="media-list"></div>
+</div>
+<button id="sendBtn">إرسال الطلب</button>
+</section>
+
+<section class="card">
+<div class="row">
+<h2 id="requestsTitle">الطلبات</h2>
+<button id="refreshBtn" class="secondary">تحديث</button>
+</div>
+<div id="filtersBox" class="filter-box">
+<label>فلتر الموقع</label>
+<select id="locationFilter">
+<option value="">كل المواقع</option>
+<option value="السبعين">السبعين</option>
+<option value="العزيزية الكبيرة">العزيزية الكبيرة</option>
+<option value="العزيزية الصغيرة">العزيزية الصغيرة</option>
+<option value="السكن">السكن</option>
+<option value="التضامن">التضامن</option>
+<option value="العروبة">العروبة</option>
+<option value="المكرونة">المكرونة</option>
+<option value="الاربعين">الاربعين</option>
+<option value="عمارة 5">عمارة 5</option>
+<option value="الاستقدام">الاستقدام</option>
+<option value="ابحر">ابحر</option>
+</select>
+<label>فلتر حالة الطلب</label>
+<select id="statusFilter">
+<option value="">كل الحالات</option>
+<option value="جديد">جديد</option>
+<option value="قيد التنفيذ">قيد التنفيذ</option>
+<option value="تم التنفيذ">تم التنفيذ</option>
+</select>
+</div>
+<div id="requestsList"></div>
+</section>
+
+<section class="card">
+<h2>الإشعارات داخل التطبيق</h2>
+<div id="notificationsList"></div>
+</section>
+</section>
+</main>
+
+<div id="imageModal" class="modal hidden">
+<button id="closeModalBtn">×</button>
+<img id="modalImage" alt="صورة مكبرة">
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
