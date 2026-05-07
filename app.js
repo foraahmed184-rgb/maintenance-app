@@ -332,7 +332,34 @@ function tr(text) {
     "عادي": "عام",
     "مهم": "اہم",
     "مستعجل": "فوری",
-    "لا توجد طلبات حالياً.": "فی الحال کوئی درخواست نہیں۔"
+    "لا توجد طلبات حالياً.": "فی الحال کوئی درخواست نہیں۔",
+    "الموقع": "مقام",
+    "غير محدد": "متعین نہیں",
+    "فلتر الموقع": "مقام فلٹر",
+    "فلتر حالة الطلب": "درخواست کی حالت فلٹر",
+    "كل المواقع": "تمام مقامات",
+    "كل الحالات": "تمام حالتیں",
+    "تحديث": "تازہ کریں",
+    "حذف الطلب": "درخواست حذف کریں",
+    "تعديل الطلب": "درخواست میں ترمیم",
+    "تذكير بالتأخير": "تاخیر کی یاد دہانی",
+    "الإشعارات داخل التطبيق": "ایپ کے اندر نوٹیفکیشن",
+    "تم إنشاء الطلب": "درخواست بن گئی",
+    "تم رفع صور الإنجاز": "کام مکمل ہونے کی تصاویر اپلوڈ ہوگئیں",
+    "قام المسؤول بتعديل بيانات الطلب": "ایڈمن نے درخواست میں ترمیم کی",
+    "السبعين": "السبعین",
+    "العزيزية الكبيرة": "العزیزیہ الکبیرہ",
+    "العزيزية الصغيرة": "العزیزیہ الصغیرہ",
+    "السكن": "رہائش",
+    "التضامن": "التضامن",
+    "العروبة": "العروبہ",
+    "المكرونة": "المکرونہ",
+    "الاربعين": "الاربعین",
+    "عمارة 5": "عمارت 5",
+    "الاستقدام": "الاستقدام",
+    "ابحر": "ابحر",
+    "فيلا الصفا": "ویلا الصفا",
+    "العزيزية تمليك": "العزیزیہ تملیک"
   };
   return map[text] || text;
 }
@@ -374,7 +401,7 @@ function requestHTML(r) {
         <div>
           <div class="request-title">${escapeHtml(r.title || "طلب")}</div>
           <div class="meta">${tr("المرسل")}: ${escapeHtml(r.createdBy || "")}</div>
-          <div class="meta">الموقع: ${escapeHtml(r.location || "غير محدد")}</div>
+          <div class="meta">${tr("الموقع")}: ${escapeHtml(tr(r.location || "غير محدد"))}</div>
         </div>
         <div class="tags">
           <span class="tag ${priorityTag}">${escapeHtml(tr(r.priority || "عادي"))}</span>
@@ -392,6 +419,7 @@ function requestHTML(r) {
       <div class="actions">
         ${canWork && r.status !== "قيد التنفيذ" ? `<button class="warning" data-action="progress" data-id="${r.id}">${tr("قيد التنفيذ")}</button>` : ""}
         ${canWork && r.status !== "تم التنفيذ" ? `<button class="success" data-action="done" data-id="${r.id}">${tr("تم التنفيذ")}</button>` : ""}
+        ${canDelete ? `<button class="secondary" data-action="editRequest" data-id="${r.id}">تعديل الطلب</button>` : ""}
         ${canDelete ? `<button class="danger" data-action="delete" data-id="${r.id}">حذف الطلب</button>` : ""}
         ${canRemind ? `<button class="secondary" data-action="remind" data-id="${r.id}">تذكير بالتأخير</button>` : ""}
       </div>
@@ -431,6 +459,10 @@ async function handleAction(e) {
       await updateDoc(ref, { status: "تم التنفيذ", comments: arrayUnion(comment("تم تغيير الحالة إلى تم التنفيذ")) });
       return await addNotification(`${currentUser} أنهى طلب صيانة`);
     }
+    if (action === "editRequest") {
+      return openAdminEdit(id);
+    }
+
     if (action === "delete") {
       if (confirm("حذف الطلب؟")) return await deleteDoc(ref);
     }
@@ -509,6 +541,60 @@ async function saveWorkerMedia(id) {
   if (input) input.value = "";
   alert("تم حفظ شرح العامل");
 }
+
+
+async function openAdminEdit(id) {
+  if (currentRole !== "admin") {
+    alert("التعديل للمسؤول فقط");
+    return;
+  }
+
+  const req = allRequests.find(item => item.id === id);
+  if (!req) {
+    alert("لم يتم العثور على الطلب");
+    return;
+  }
+
+  const title = prompt("عنوان المشكلة:", req.title || "");
+  if (title === null) return;
+
+  const description = prompt("وصف المشكلة:", req.description || "");
+  if (description === null) return;
+
+  const priority = prompt("الأولوية: عادي / مهم / مستعجل", req.priority || "عادي");
+  if (priority === null) return;
+  if (!["عادي", "مهم", "مستعجل"].includes(priority.trim())) {
+    alert("الأولوية غير صحيحة");
+    return;
+  }
+
+  const location = prompt("الموقع:", req.location || "");
+  if (location === null) return;
+  if (!location.trim()) {
+    alert("الموقع لا يمكن يكون فارغ");
+    return;
+  }
+
+  const status = prompt("الحالة: جديد / قيد التنفيذ / تم التنفيذ", req.status || "جديد");
+  if (status === null) return;
+  if (!["جديد", "قيد التنفيذ", "تم التنفيذ"].includes(status.trim())) {
+    alert("الحالة غير صحيحة");
+    return;
+  }
+
+  await updateDoc(doc(db, "requests", id), {
+    title: title.trim(),
+    description: description.trim(),
+    priority: priority.trim(),
+    location: location.trim(),
+    status: status.trim(),
+    comments: arrayUnion(comment("قام المسؤول بتعديل بيانات الطلب"))
+  });
+
+  await addNotification(`${currentUser} عدل بيانات طلب صيانة`);
+  alert("تم تعديل الطلب ✅");
+}
+
 
 async function addNotification(text) {
   await addDoc(notificationsRef, { text, by: currentUser || "النظام", createdAt: serverTimestamp() });
