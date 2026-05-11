@@ -135,6 +135,23 @@ function stopRequestAudio() {
   $("recordBtn").classList.remove("hidden");
 }
 
+
+function sendRequestAudio() {
+  if (!pendingRequestAudio) {
+    alert("سجل صوت أولاً");
+    return;
+  }
+  requestAudios.push(pendingRequestAudio);
+  pendingRequestAudio = "";
+  $("sendAudioBtn").classList.add("hidden");
+  renderRequestAudioPreviews();
+}
+
+function deleteRequestAudio(index) {
+  requestAudios.splice(index, 1);
+  renderRequestAudioPreviews();
+}
+
 function renderRequestAudioPreviews() {
   $("requestAudioPreviews").innerHTML = requestAudios.map((src, index) => `
     <div class="audio-item">
