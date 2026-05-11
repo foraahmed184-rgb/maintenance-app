@@ -21,9 +21,11 @@ let currentRole = "member";
 let latestNotificationId = "";
 let allRequests = [];
 let requestAudios = [];
+let pendingRequestAudio = "";
 let requestRecorder = null;
 let requestChunks = [];
 let workerAudios = {};
+let pendingWorkerAudios = {};
 
 const $ = (id) => document.getElementById(id);
 
@@ -36,6 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("sendBtn").addEventListener("click", sendRequest);
   $("recordBtn").addEventListener("click", startRequestAudio);
   $("stopRecordBtn").addEventListener("click", stopRequestAudio);
+  $("sendAudioBtn").addEventListener("click", sendRequestAudio);
   $("closeModalBtn").addEventListener("click", closeImage);
   $("locationFilter").addEventListener("change", () => renderRequests(allRequests));
   $("statusFilter").addEventListener("change", () => renderRequests(allRequests));
@@ -112,8 +115,10 @@ async function startRequestAudio() {
     requestRecorder.onstop = async () => {
       const blob = new Blob(requestChunks, { type: requestRecorder.mimeType || "audio/webm" });
       const data = await blobToBase64(blob);
-      requestAudios.push(data);
-      renderRequestAudioPreviews();
+      pendingRequestAudio = data;
+      $("requestAudioPreviews").innerHTML = `<div class="audio-item"><audio src="${data}" controls preload="auto"></audio><p class="hint">اضغط إرسال الصوت لإضافته للطلب</p></div>`;
+      $("requestAudioPreviews").querySelectorAll("audio").forEach(a => a.load());
+      $("sendAudioBtn").classList.remove("hidden");
       stream.getTracks().forEach(t => t.stop());
     };
     requestRecorder.start();
@@ -131,7 +136,13 @@ function stopRequestAudio() {
 }
 
 function renderRequestAudioPreviews() {
-  $("requestAudioPreviews").innerHTML = requestAudios.map(src => `<audio src="${src}" controls preload="metadata"></audio>`).join("");
+  $("requestAudioPreviews").innerHTML = requestAudios.map((src, index) => `
+    <div class="audio-item">
+      <audio src="${src}" controls preload="auto"></audio>
+      <button type="button" class="danger" onclick="deleteRequestAudio(${index})">حذف الصوت</button>
+    </div>
+  `).join("");
+  $("requestAudioPreviews").querySelectorAll("audio").forEach(a => a.load());
 }
 
 function blobToBase64(blob) {
@@ -234,8 +245,15 @@ async function loadMedia(requestId, kind, targetId, type) {
     return;
   }
   const data = chunks.map(c => c.data).join("");
-  if (type === "audio") target.innerHTML = `<audio src="${data}" controls preload="metadata"></audio>`;
-  else target.innerHTML = `<video src="${data}" controls></video>`;
+  if (type === "audio") {
+    target.innerHTML = `<audio src="${data}" controls preload="auto"></audio>`;
+    const audio = target.querySelector("audio");
+    if (audio) audio.load();
+  } else {
+    target.innerHTML = `<video src="${data}" controls preload="metadata"></video>`;
+    const video = target.querySelector("video");
+    if (video) video.load();
+  }
 }
 
 async function sendRequest() {
@@ -284,6 +302,8 @@ function resetForm() {
   $("imagesInput").value = "";
   $("videosInput").value = "";
   requestAudios = [];
+  pendingRequestAudio = "";
+  $("sendAudioBtn").classList.add("hidden");
   $("requestAudioPreviews").innerHTML = "";
 }
 
@@ -390,8 +410,8 @@ function requestHTML(r) {
   const priorityClass = r.priority === "مستعجل" ? "priority-urgent" : r.priority === "مهم" ? "priority-important" : "";
   const priorityTag = r.priority === "مستعجل" ? "tag-urgent" : r.priority === "مهم" ? "tag-important" : "tag-normal";
   const statusTag = r.status === "تم التنفيذ" ? "tag-done" : r.status === "قيد التنفيذ" ? "tag-progress" : "tag-new";
-  const images = (r.images || []).map(src => `<img src="${src}" data-img="${src}">`).join("");
-  const doneImages = (r.doneImages || []).map(src => `<img src="${src}" data-img="${src}">`).join("");
+  const images = (r.images || []).map(src => `<img src="${src}" data-img="${src}" loading="lazy">`).join("");
+  const doneImages = (r.doneImages || []).map(src => `<img src="${src}" data-img="${src}" loading="lazy">`).join("");
   const canWork = currentRole === "worker" || currentRole === "admin";
   const canDelete = currentRole === "admin";
   const canRemind = currentRole === "member";
@@ -435,6 +455,7 @@ function workerTools(id) {
       <label>${tr("تسجيلات العامل")}</label>
       <button type="button" class="secondary" data-action="startWorkerAudio" data-id="${id}">${tr("بدء تسجيل صوت العامل 🎙️")}</button>
       <button type="button" class="secondary hidden" data-action="stopWorkerAudio" data-id="${id}">${tr("إيقاف التسجيل ⏹️")}</button>
+      <button type="button" class="secondary hidden" data-action="sendWorkerAudio" data-id="${id}">${tr("إرسال الصوت")}</button>
       <div id="workerAudioPreviews-${id}" class="media-list"></div>
       <label>${tr("فيديوهات العامل")}</label>
       <input id="workerVideo-${id}" type="file" accept="video/*" multiple>
@@ -480,6 +501,7 @@ async function handleAction(e) {
     }
     if (action === "startWorkerAudio") return await startWorkerAudio(id, e.currentTarget);
     if (action === "stopWorkerAudio") return stopWorkerAudio(id, e.currentTarget);
+    if (action === "sendWorkerAudio") return sendWorkerAudio(id);
     if (action === "saveWorkerMedia") return await saveWorkerMedia(id);
   } catch (err) {
     console.error(err);
@@ -500,10 +522,13 @@ async function startWorkerAudio(id, startBtn) {
     rec.onstop = async () => {
       const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
       const data = await blobToBase64(blob);
-      if (!workerAudios[id]) workerAudios[id] = [];
-      workerAudios[id].push(data);
+      pendingWorkerAudios[id] = data;
       const box = $(`workerAudioPreviews-${id}`);
-      if (box) box.innerHTML = workerAudios[id].map(src => `<audio src="${src}" controls preload="metadata"></audio>`).join("");
+      if (box) {
+        box.innerHTML = `<div class="audio-item"><audio src="${data}" controls preload="auto"></audio><p class="hint">${tr("إرسال الصوت")}</p></div>`;
+        box.querySelectorAll("audio").forEach(a => a.load());
+      }
+      document.querySelector(`[data-action="sendWorkerAudio"][data-id="${id}"]`)?.classList.remove("hidden");
       stream.getTracks().forEach(t => t.stop());
     };
     workerAudios[id + "_rec"] = rec;
@@ -522,6 +547,40 @@ function stopWorkerAudio(id, stopBtn) {
   document.querySelector(`[data-action="startWorkerAudio"][data-id="${id}"]`)?.classList.remove("hidden");
 }
 
+
+function sendWorkerAudio(id) {
+  const audio = pendingWorkerAudios[id];
+  if (!audio) {
+    alert("لا يوجد تسجيل لإرساله");
+    return;
+  }
+  if (!workerAudios[id]) workerAudios[id] = [];
+  workerAudios[id].push(audio);
+  pendingWorkerAudios[id] = "";
+  document.querySelector(`[data-action="sendWorkerAudio"][data-id="${id}"]`)?.classList.add("hidden");
+  renderWorkerAudioPreviews(id);
+}
+
+function deleteWorkerAudio(id, index) {
+  if (!workerAudios[id]) return;
+  workerAudios[id].splice(index, 1);
+  renderWorkerAudioPreviews(id);
+}
+
+function renderWorkerAudioPreviews(id) {
+  const box = $(`workerAudioPreviews-${id}`);
+  if (!box) return;
+  box.innerHTML = (workerAudios[id] || []).map((src, index) => `
+    <div class="audio-item">
+      <audio src="${src}" controls preload="auto"></audio>
+      <button type="button" class="danger" onclick="deleteWorkerAudio('${id}', ${index})">${tr("حذف الصوت")}</button>
+    </div>
+  `).join("");
+  box.querySelectorAll("audio").forEach(a => a.load());
+}
+
+window.deleteWorkerAudio = deleteWorkerAudio;
+
 async function saveWorkerMedia(id) {
   const ref = doc(db, "requests", id);
   const audios = workerAudios[id] || [];
@@ -535,6 +594,8 @@ async function saveWorkerMedia(id) {
   await updateDoc(ref, data);
   await addNotification(`${currentUser} أضاف شرح صوتي/فيديو`);
   workerAudios[id] = [];
+  pendingWorkerAudios[id] = "";
+  document.querySelector(`[data-action="sendWorkerAudio"][data-id="${id}"]`)?.classList.add("hidden");
   const box = $(`workerAudioPreviews-${id}`);
   if (box) box.innerHTML = "";
   const input = $(`workerVideo-${id}`);
