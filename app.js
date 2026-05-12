@@ -415,6 +415,9 @@ function tr(text) {
     "مستعجل": "فوری",
     "لا توجد طلبات حالياً.": "فی الحال کوئی درخواست نہیں۔",
     "الموقع": "مقام",
+    "تاريخ الإنشاء": "بنانے کی تاریخ",
+    "تاريخ التذكير": "یاد دہانی کی تاریخ",
+    "تاريخ التنفيذ": "مکمل ہونے کی تاریخ",
     "غير محدد": "متعین نہیں",
     "فلتر الموقع": "مقام فلٹر",
     "فلتر حالة الطلب": "درخواست کی حالت فلٹر",
@@ -469,6 +472,34 @@ function mediaButtons(items, requestId, baseId, label, type) {
   }).join("") + `</div>`;
 }
 
+
+function formatDateTime(value) {
+  if (!value) return "غير محدد";
+  let d;
+  if (value && typeof value.toDate === "function") d = value.toDate();
+  else if (typeof value === "string") d = new Date(value);
+  else if (value instanceof Date) d = value;
+  else if (typeof value === "number") d = new Date(value);
+  else return "غير محدد";
+  if (Number.isNaN(d.getTime())) return "غير محدد";
+  return new Intl.DateTimeFormat("en-GB", {
+    calendar: "gregory",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).format(d);
+}
+
+function requestLabel(r) {
+  const title = r?.title || "طلب صيانة";
+  const location = r?.location || "غير محدد";
+  return `${title} - ${location}`;
+}
+
 function requestHTML(r) {
   const priorityClass = r.priority === "مستعجل" ? "priority-urgent" : r.priority === "مهم" ? "priority-important" : "";
   const priorityTag = r.priority === "مستعجل" ? "tag-urgent" : r.priority === "مهم" ? "tag-important" : "tag-normal";
@@ -485,6 +516,9 @@ function requestHTML(r) {
           <div class="request-title">${escapeHtml(r.title || "طلب")}</div>
           <div class="meta">${tr("المرسل")}: ${escapeHtml(r.createdBy || "")}</div>
           <div class="meta">${tr("الموقع")}: ${escapeHtml(tr(r.location || "غير محدد"))}</div>
+          <div class="meta">${tr("تاريخ الإنشاء")}: ${formatDateTime(r.createdAt)}</div>
+          ${r.reminderAt ? `<div class="meta">${tr("تاريخ التذكير")}: ${formatDateTime(r.reminderAt)}</div>` : ""}
+          ${r.completedAt ? `<div class="meta">${tr("تاريخ التنفيذ")}: ${formatDateTime(r.completedAt)}</div>` : ""}
         </div>
         <div class="tags">
           <span class="tag ${priorityTag}">${escapeHtml(tr(r.priority || "عادي"))}</span>
@@ -536,12 +570,14 @@ async function handleAction(e) {
     if (action === "loadAudio") return await loadMedia(id, kind, target, "audio");
     if (action === "loadVideo") return await loadMedia(id, kind, target, "video");
     if (action === "progress") {
-      await updateDoc(ref, { status: "قيد التنفيذ", comments: arrayUnion(comment("تم تغيير الحالة إلى قيد التنفيذ")) });
-      return await addNotification(`${currentUser} غيّر الحالة إلى قيد التنفيذ`);
+      await updateDoc(ref, { status: "قيد التنفيذ", startedAt: serverTimestamp(), comments: arrayUnion(comment("تم تغيير الحالة إلى قيد التنفيذ")) });
+      const req = allRequests.find(item => item.id === id);
+      return await addNotification(`${currentUser} غيّر حالة الطلب إلى قيد التنفيذ: ${requestLabel(req)}`);
     }
     if (action === "done") {
-      await updateDoc(ref, { status: "تم التنفيذ", comments: arrayUnion(comment("تم تغيير الحالة إلى تم التنفيذ")) });
-      return await addNotification(`${currentUser} أنهى طلب صيانة`);
+      await updateDoc(ref, { status: "تم التنفيذ", completedAt: serverTimestamp(), comments: arrayUnion(comment("تم تغيير الحالة إلى تم التنفيذ")) });
+      const req = allRequests.find(item => item.id === id);
+      return await addNotification(`${currentUser} أنهى الطلب: ${requestLabel(req)}`);
     }
     if (action === "editRequest") {
       return openAdminEdit(id);
@@ -551,15 +587,25 @@ async function handleAction(e) {
       if (confirm("حذف الطلب؟")) return await deleteDoc(ref);
     }
     if (action === "remind") {
-      await updateDoc(ref, { comments: arrayUnion(comment("تذكير: الطلب متأخر")) });
-      await addNotification(`${currentUser} أرسل تذكير بالتأخير`);
-      return alert("تم إرسال التذكير");
+      const req = allRequests.find(item => item.id === id);
+      const reminderTime = new Date();
+      const reminderText = `تذكير للطلب: ${requestLabel(req)} | وقت التذكير: ${formatDateTime(reminderTime)}`;
+      await updateDoc(ref, {
+        reminderAt: serverTimestamp(),
+        reminderBy: currentUser,
+        reminderRequestId: id,
+        comments: arrayUnion(comment(reminderText))
+      });
+      await addNotification(`${currentUser} أرسل تذكير للطلب: ${requestLabel(req)} - ${formatDateTime(reminderTime)}`);
+      return alert(`تم إرسال التذكير لهذا الطلب:
+${requestLabel(req)}`);
     }
     if (action === "saveDoneImages") {
       const imgs = await imageFilesToBase64($(`doneImages-${id}`));
       if (!imgs.length) return alert("اختر صورة أولاً");
-      await updateDoc(ref, { doneImages: arrayUnion(...imgs), status: "تم التنفيذ", comments: arrayUnion(comment("تم رفع صور الإنجاز")) });
-      await addNotification(`${currentUser} رفع صور الإنجاز`);
+      await updateDoc(ref, { doneImages: arrayUnion(...imgs), status: "تم التنفيذ", completedAt: serverTimestamp(), comments: arrayUnion(comment("تم رفع صور الإنجاز")) });
+      const req = allRequests.find(item => item.id === id);
+      await addNotification(`${currentUser} رفع صور الإنجاز للطلب: ${requestLabel(req)}`);
       return alert("تم حفظ الصور");
     }
     if (action === "startWorkerAudio") return await startWorkerAudio(id, e.currentTarget);
@@ -715,14 +761,16 @@ async function openAdminEdit(id) {
     return;
   }
 
-  await updateDoc(doc(db, "requests", id), {
+  const updateData = {
     title: title.trim(),
     description: description.trim(),
     priority: priority.trim(),
     location: location.trim(),
     status: status.trim(),
     comments: arrayUnion(comment("قام المسؤول بتعديل بيانات الطلب"))
-  });
+  };
+  if (status.trim() === "تم التنفيذ") updateData.completedAt = serverTimestamp();
+  await updateDoc(doc(db, "requests", id), updateData);
 
   await addNotification(`${currentUser} عدل بيانات طلب صيانة`);
   alert("تم تعديل الطلب ✅");
