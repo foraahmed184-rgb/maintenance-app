@@ -34,7 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("loginBtn").addEventListener("click", login);
   $("logoutBtn").addEventListener("click", logout);
   $("notifyBtn").addEventListener("click", askNotifications);
-  $("refreshBtn").addEventListener("click", () => location.reload());
+  $("refreshBtn").addEventListener("click", refreshRequestsOnly);
   $("sendBtn").addEventListener("click", sendRequest);
   $("recordBtn").addEventListener("click", startRequestAudio);
   $("stopRecordBtn").addEventListener("click", stopRequestAudio);
@@ -42,6 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("closeModalBtn").addEventListener("click", closeImage);
   $("locationFilter").addEventListener("change", () => renderRequests(allRequests));
   $("statusFilter").addEventListener("change", () => renderRequests(allRequests));
+  restoreSession();
   togglePassword();
 });
 
@@ -58,8 +59,16 @@ function login() {
   if (!name) return alert("اكتب اسم المستخدم");
   if (role === "admin" && (name !== "Ahmed" || pass !== "2006")) return alert("بيانات المسؤول غير صحيحة");
   if (role === "worker" && (name !== "Haroon" || pass !== "Ha")) return alert("بيانات العامل غير صحيحة");
+  setLoggedIn(name, role, true);
+}
+
+function setLoggedIn(name, role, saveSession = false) {
   currentUser = name;
   currentRole = role;
+  if (saveSession) {
+    sessionStorage.setItem("maintenanceUser", name);
+    sessionStorage.setItem("maintenanceRole", role);
+  }
   $("loginView").classList.add("hidden");
   $("appView").classList.remove("hidden");
   $("logoutBtn").classList.remove("hidden");
@@ -71,9 +80,21 @@ function login() {
     $("appTitle").textContent = "مینٹیننس درخواستیں";
     $("appSubtitle").textContent = "کاریگر کا صفحہ";
     $("requestsTitle").textContent = "درخواستیں";
+  } else {
+    $("newRequestCard").classList.remove("hidden");
+    $("workerUrduNotice").classList.add("hidden");
+    $("appTitle").textContent = "نظام طلبات الصيانة";
+    $("appSubtitle").textContent = "تنظيم طلبات الصيانة بين الفريق والعامل والمسؤول";
+    $("requestsTitle").textContent = "الطلبات";
   }
   listenRequests();
   listenNotifications();
+}
+
+function restoreSession() {
+  const savedUser = sessionStorage.getItem("maintenanceUser");
+  const savedRole = sessionStorage.getItem("maintenanceRole");
+  if (savedUser && savedRole) setLoggedIn(savedUser, savedRole, false);
 }
 
 function roleLabel(role) {
@@ -82,7 +103,21 @@ function roleLabel(role) {
   return "عضو فريق 👥";
 }
 
-function logout() { location.reload(); }
+function logout() {
+  sessionStorage.removeItem("maintenanceUser");
+  sessionStorage.removeItem("maintenanceRole");
+  location.reload();
+}
+
+function refreshRequestsOnly() {
+  renderRequests(allRequests);
+  const btn = $("refreshBtn");
+  if (btn) {
+    const old = btn.textContent;
+    btn.textContent = currentRole === "worker" ? "تازہ ہوگیا ✅" : "تم التحديث ✅";
+    setTimeout(() => { btn.textContent = tr("تحديث"); }, 1000);
+  }
+}
 
 async function askNotifications() {
   if (!("Notification" in window)) return alert("المتصفح لا يدعم الإشعارات");
@@ -116,7 +151,7 @@ async function startRequestAudio() {
       const blob = new Blob(requestChunks, { type: requestRecorder.mimeType || "audio/webm" });
       const data = await blobToBase64(blob);
       pendingRequestAudio = data;
-      $("requestAudioPreviews").innerHTML = `<div class="audio-item"><audio src="${data}" controls preload="auto"></audio><p class="hint">اضغط إرسال الصوت لإضافته للطلب</p></div>`;
+      $("requestAudioPreviews").innerHTML = `<div class="audio-item"><audio src="${data}" controls preload="auto"></audio><p class="hint">اضغط إرسال الصوت لإضافته للطلب</p><button type="button" class="danger" onclick="clearPendingRequestAudio()">حذف الصوت</button></div>`;
       $("requestAudioPreviews").querySelectorAll("audio").forEach(a => a.load());
       $("sendAudioBtn").classList.remove("hidden");
       stream.getTracks().forEach(t => t.stop());
@@ -151,6 +186,15 @@ function deleteRequestAudio(index) {
   requestAudios.splice(index, 1);
   renderRequestAudioPreviews();
 }
+
+function clearPendingRequestAudio() {
+  pendingRequestAudio = "";
+  $("sendAudioBtn").classList.add("hidden");
+  renderRequestAudioPreviews();
+}
+
+window.deleteRequestAudio = deleteRequestAudio;
+window.clearPendingRequestAudio = clearPendingRequestAudio;
 
 function renderRequestAudioPreviews() {
   $("requestAudioPreviews").innerHTML = requestAudios.map((src, index) => `
@@ -377,6 +421,8 @@ function tr(text) {
     "كل المواقع": "تمام مقامات",
     "كل الحالات": "تمام حالتیں",
     "تحديث": "تازہ کریں",
+    "إرسال الصوت": "آواز بھیجیں",
+    "حذف الصوت": "آواز حذف کریں",
     "حذف الطلب": "درخواست حذف کریں",
     "تعديل الطلب": "درخواست میں ترمیم",
     "تذكير بالتأخير": "تاخیر کی یاد دہانی",
@@ -418,7 +464,7 @@ function mediaButtons(items, requestId, baseId, label, type) {
   if (!items || !items.length) return "";
   return `<b>${tr(label)}</b><div class="media-grid">` + items.map((item, i) => {
     const target = `${baseId}-${requestId}-${i}`;
-    const text = type === "audio" ? `تشغيل صوت ${i+1}` : `تشغيل فيديو ${i+1}`;
+    const text = type === "audio" ? `${currentRole === "worker" ? "آواز چلائیں" : "تشغيل صوت"} ${i+1}` : `${currentRole === "worker" ? "ویڈیو چلائیں" : "تشغيل فيديو"} ${i+1}`;
     return `<div id="${target}"><button type="button" class="secondary" data-action="${type === "audio" ? "loadAudio" : "loadVideo"}" data-id="${requestId}" data-kind="${item.kind}" data-target="${target}">${text}</button></div>`;
   }).join("") + `</div>`;
 }
@@ -542,7 +588,7 @@ async function startWorkerAudio(id, startBtn) {
       pendingWorkerAudios[id] = data;
       const box = $(`workerAudioPreviews-${id}`);
       if (box) {
-        box.innerHTML = `<div class="audio-item"><audio src="${data}" controls preload="auto"></audio><p class="hint">${tr("إرسال الصوت")}</p></div>`;
+        box.innerHTML = `<div class="audio-item"><audio src="${data}" controls preload="auto"></audio><p class="hint">${tr("إرسال الصوت")}</p><button type="button" class="danger" onclick="clearPendingWorkerAudio('${id}')">${tr("حذف الصوت")}</button></div>`;
         box.querySelectorAll("audio").forEach(a => a.load());
       }
       document.querySelector(`[data-action="sendWorkerAudio"][data-id="${id}"]`)?.classList.remove("hidden");
@@ -584,6 +630,14 @@ function deleteWorkerAudio(id, index) {
   renderWorkerAudioPreviews(id);
 }
 
+function clearPendingWorkerAudio(id) {
+  pendingWorkerAudios[id] = "";
+  const box = $(`workerAudioPreviews-${id}`);
+  if (box) box.innerHTML = "";
+  document.querySelector(`[data-action="sendWorkerAudio"][data-id="${id}"]`)?.classList.add("hidden");
+  renderWorkerAudioPreviews(id);
+}
+
 function renderWorkerAudioPreviews(id) {
   const box = $(`workerAudioPreviews-${id}`);
   if (!box) return;
@@ -597,6 +651,7 @@ function renderWorkerAudioPreviews(id) {
 }
 
 window.deleteWorkerAudio = deleteWorkerAudio;
+window.clearPendingWorkerAudio = clearPendingWorkerAudio;
 
 async function saveWorkerMedia(id) {
   const ref = doc(db, "requests", id);
