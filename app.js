@@ -35,7 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("logoutBtn").addEventListener("click", logout);
   $("notifyBtn").addEventListener("click", askNotifications);
   $("refreshBtn").addEventListener("click", refreshRequestsOnly);
-  $("deleteCompletedBtn").addEventListener("click", deleteAllCompletedRequests);
+  $("deleteCompletedBtn").addEventListener("click", deleteCompletedRequestsAndRelatedNotifications);
   $("sendBtn").addEventListener("click", sendRequest);
   $("recordBtn").addEventListener("click", startRequestAudio);
   $("stopRecordBtn").addEventListener("click", stopRequestAudio);
@@ -127,35 +127,58 @@ async function commitBatchDeletes(items) {
   if (count > 0) await batch.commit();
 }
 
-async function deleteAllCompletedRequests() {
+async function deleteCompletedRequestsAndRelatedNotifications() {
   if (currentRole !== "admin") return alert("هذا الزر للمسؤول فقط");
   const completed = allRequests.filter(r => r.status === "تم التنفيذ");
   if (!completed.length) return alert("لا توجد طلبات حالتها تم التنفيذ");
-  const ok = confirm(`سيتم حذف ${completed.length} طلب/طلبات منتهية مع ملفات الصوت والفيديو المرتبطة بها. هل أنت متأكد؟`);
+
+  const ok = confirm(`سيتم حذف ${completed.length} طلب/طلبات منتهية + الإشعارات الخاصة بها فقط. هل أنت متأكد؟`);
   if (!ok) return;
 
   const btn = $("deleteCompletedBtn");
   btn.disabled = true;
   btn.textContent = "جاري الحذف...";
+
   try {
+    const requestIds = new Set(completed.map(r => r.id));
     const refsToDelete = [];
+
     for (const req of completed) {
       const chunksQuery = query(mediaRef, where("requestId", "==", req.id));
       const chunksSnap = await getDocs(chunksQuery);
       chunksSnap.forEach(d => refsToDelete.push(d.ref));
       refsToDelete.push(doc(db, "requests", req.id));
     }
+
+    const notificationSnap = await getDocs(notificationsRef);
+    notificationSnap.forEach(d => {
+      const notification = d.data() || {};
+      if (isNotificationForDeletedRequest(notification, completed, requestIds)) {
+        refsToDelete.push(d.ref);
+      }
+    });
+
     await commitBatchDeletes(refsToDelete);
-    await addNotification(`${currentUser} حذف جميع طلبات تم التنفيذ لتقليل مساحة التخزين`);
-    alert(`تم حذف ${completed.length} طلب/طلبات منتهية بنجاح`);
+    alert(`تم حذف ${completed.length} طلب/طلبات منتهية مع إشعاراتها فقط ✅`);
   } catch (err) {
     console.error(err);
     alert("حدث خطأ أثناء الحذف، حاول مرة أخرى.");
   } finally {
     btn.disabled = false;
-    btn.textContent = "حذف جميع طلبات تم التنفيذ";
+    btn.textContent = "حذف طلبات تم التنفيذ مع إشعاراتها";
   }
 }
+
+function isNotificationForDeletedRequest(notification, deletedRequests, requestIds) {
+  if (notification.requestId && requestIds.has(notification.requestId)) return true;
+  const text = notification.text || "";
+  return deletedRequests.some(req => {
+    const title = (req.title || "").trim();
+    const label = requestLabel(req);
+    return (title && text.includes(title)) || (label && text.includes(label));
+  });
+}
+
 
 function refreshRequestsOnly() {
   renderRequests(allRequests);
@@ -392,7 +415,7 @@ async function sendRequest() {
     const requestVideos = await saveFilesAsRefs(docRef.id, $("videosInput").files, "requestVideo");
     const requestAudiosRefs = await saveAudioDataAsRefs(docRef.id, requestAudios, "requestAudio");
     await updateDoc(docRef, { requestVideos, requestAudios: requestAudiosRefs });
-    await addNotification(`طلب جديد من ${currentUser}: ${title}`);
+    await addNotification(`طلب جديد من ${currentUser}: ${title}`, docRef.id);
     resetForm();
     alert("تم إرسال الطلب ✅");
   } catch (e) {
@@ -620,12 +643,12 @@ async function handleAction(e) {
     if (action === "progress") {
       await updateDoc(ref, { status: "قيد التنفيذ", startedAt: serverTimestamp(), comments: arrayUnion(comment("تم تغيير الحالة إلى قيد التنفيذ")) });
       const req = allRequests.find(item => item.id === id);
-      return await addNotification(`${currentUser} غيّر حالة الطلب إلى قيد التنفيذ: ${requestLabel(req)}`);
+      return await addNotification(`${currentUser} غيّر حالة الطلب إلى قيد التنفيذ: ${requestLabel(req)}`, id);
     }
     if (action === "done") {
       await updateDoc(ref, { status: "تم التنفيذ", completedAt: serverTimestamp(), comments: arrayUnion(comment("تم تغيير الحالة إلى تم التنفيذ")) });
       const req = allRequests.find(item => item.id === id);
-      return await addNotification(`${currentUser} أنهى الطلب: ${requestLabel(req)}`);
+      return await addNotification(`${currentUser} أنهى الطلب: ${requestLabel(req)}`, id);
     }
     if (action === "editRequest") {
       return openAdminEdit(id);
@@ -644,7 +667,7 @@ async function handleAction(e) {
         reminderRequestId: id,
         comments: arrayUnion(comment(reminderText))
       });
-      await addNotification(`${currentUser} أرسل تذكير للطلب: ${requestLabel(req)} - ${formatDateTime(reminderTime)}`);
+      await addNotification(`${currentUser} أرسل تذكير للطلب: ${requestLabel(req)} - ${formatDateTime(reminderTime)}`, id);
       return alert(`تم إرسال التذكير لهذا الطلب:
 ${requestLabel(req)}`);
     }
@@ -653,7 +676,7 @@ ${requestLabel(req)}`);
       if (!imgs.length) return alert("اختر صورة أولاً");
       await updateDoc(ref, { doneImages: arrayUnion(...imgs), status: "تم التنفيذ", completedAt: serverTimestamp(), comments: arrayUnion(comment("تم رفع صور الإنجاز")) });
       const req = allRequests.find(item => item.id === id);
-      await addNotification(`${currentUser} رفع صور الإنجاز للطلب: ${requestLabel(req)}`);
+      await addNotification(`${currentUser} رفع صور الإنجاز للطلب: ${requestLabel(req)}`, id);
       return alert("تم حفظ الصور");
     }
     if (action === "startWorkerAudio") return await startWorkerAudio(id, e.currentTarget);
@@ -758,7 +781,7 @@ async function saveWorkerMedia(id) {
   if (workerAudioRefs.length) data.workerAudios = arrayUnion(...workerAudioRefs);
   if (workerVideoRefs.length) data.workerVideos = arrayUnion(...workerVideoRefs);
   await updateDoc(ref, data);
-  await addNotification(`${currentUser} أضاف شرح صوتي/فيديو`);
+  await addNotification(`${currentUser} أضاف شرح صوتي/فيديو`, id);
   workerAudios[id] = [];
   pendingWorkerAudios[id] = "";
   document.querySelector(`[data-action="sendWorkerAudio"][data-id="${id}"]`)?.classList.add("hidden");
@@ -820,13 +843,15 @@ async function openAdminEdit(id) {
   if (status.trim() === "تم التنفيذ") updateData.completedAt = serverTimestamp();
   await updateDoc(doc(db, "requests", id), updateData);
 
-  await addNotification(`${currentUser} عدل بيانات طلب صيانة`);
+  await addNotification(`${currentUser} عدل بيانات طلب صيانة`, id);
   alert("تم تعديل الطلب ✅");
 }
 
 
-async function addNotification(text) {
-  await addDoc(notificationsRef, { text, by: currentUser || "النظام", createdAt: serverTimestamp() });
+async function addNotification(text, requestId = "") {
+  const data = { text, by: currentUser || "النظام", createdAt: serverTimestamp() };
+  if (requestId) data.requestId = requestId;
+  await addDoc(notificationsRef, data);
 }
 
 function openImage(src) {
