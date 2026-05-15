@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy, arrayUnion, getDocs, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy, arrayUnion, getDocs, where, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCK7gJ9-zUiygiYHJVwYFb6nUBweptV3XI",
@@ -35,6 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("logoutBtn").addEventListener("click", logout);
   $("notifyBtn").addEventListener("click", askNotifications);
   $("refreshBtn").addEventListener("click", refreshRequestsOnly);
+  $("deleteCompletedBtn").addEventListener("click", deleteAllCompletedRequests);
   $("sendBtn").addEventListener("click", sendRequest);
   $("recordBtn").addEventListener("click", startRequestAudio);
   $("stopRecordBtn").addEventListener("click", stopRequestAudio);
@@ -80,12 +81,14 @@ function setLoggedIn(name, role, saveSession = false) {
     $("appTitle").textContent = "مینٹیننس درخواستیں";
     $("appSubtitle").textContent = "کاریگر کا صفحہ";
     $("requestsTitle").textContent = "درخواستیں";
+    $("adminCleanupCard").classList.add("hidden");
   } else {
     $("newRequestCard").classList.remove("hidden");
     $("workerUrduNotice").classList.add("hidden");
     $("appTitle").textContent = "نظام طلبات الصيانة";
     $("appSubtitle").textContent = "تنظيم طلبات الصيانة بين الفريق والعامل والمسؤول";
     $("requestsTitle").textContent = "الطلبات";
+    $("adminCleanupCard").classList.toggle("hidden", role !== "admin");
   }
   listenRequests();
   listenNotifications();
@@ -107,6 +110,51 @@ function logout() {
   sessionStorage.removeItem("maintenanceUser");
   sessionStorage.removeItem("maintenanceRole");
   location.reload();
+}
+
+async function commitBatchDeletes(items) {
+  let batch = writeBatch(db);
+  let count = 0;
+  for (const ref of items) {
+    batch.delete(ref);
+    count++;
+    if (count === 450) {
+      await batch.commit();
+      batch = writeBatch(db);
+      count = 0;
+    }
+  }
+  if (count > 0) await batch.commit();
+}
+
+async function deleteAllCompletedRequests() {
+  if (currentRole !== "admin") return alert("هذا الزر للمسؤول فقط");
+  const completed = allRequests.filter(r => r.status === "تم التنفيذ");
+  if (!completed.length) return alert("لا توجد طلبات حالتها تم التنفيذ");
+  const ok = confirm(`سيتم حذف ${completed.length} طلب/طلبات منتهية مع ملفات الصوت والفيديو المرتبطة بها. هل أنت متأكد؟`);
+  if (!ok) return;
+
+  const btn = $("deleteCompletedBtn");
+  btn.disabled = true;
+  btn.textContent = "جاري الحذف...";
+  try {
+    const refsToDelete = [];
+    for (const req of completed) {
+      const chunksQuery = query(mediaRef, where("requestId", "==", req.id));
+      const chunksSnap = await getDocs(chunksQuery);
+      chunksSnap.forEach(d => refsToDelete.push(d.ref));
+      refsToDelete.push(doc(db, "requests", req.id));
+    }
+    await commitBatchDeletes(refsToDelete);
+    await addNotification(`${currentUser} حذف جميع طلبات تم التنفيذ لتقليل مساحة التخزين`);
+    alert(`تم حذف ${completed.length} طلب/طلبات منتهية بنجاح`);
+  } catch (err) {
+    console.error(err);
+    alert("حدث خطأ أثناء الحذف، حاول مرة أخرى.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "حذف جميع طلبات تم التنفيذ";
+  }
 }
 
 function refreshRequestsOnly() {
